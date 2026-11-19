@@ -4,5 +4,5 @@ import { RegisterResult } from "@/types/auth.types";
 import { createUserWithRole } from "@/services/Auth/register/register.service";
 
 export function registerAdmin(input: RegisterInput): Promise<RegisterResult> {
-  return createUserWithRole(input, Role.ADMIN);
+  return createUserWithRole(input, Role.PrefeituraVendedor);
 }

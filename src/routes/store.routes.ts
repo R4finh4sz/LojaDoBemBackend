@@ -13,10 +13,10 @@ router.get("/balance", requireRole(Role.USER), balanceController);
 router.post("/redemptions", requireRole(Role.USER), validateDto(RedeemProductDto), redeemController);
 router.get("/redemptions", requireRole(Role.USER), userRedemptionsController);
 
-router.post("/admin/products", requireRole(Role.ADMIN), validateDto(CreateProductDto), createProductController);
-router.get("/admin/products", requireRole(Role.ADMIN), listAdminProductsController);
-router.post("/admin/ecocoins", requireRole(Role.ADMIN), validateDto(GrantEcoCoinDto), grantEcoCoinController);
-router.get("/admin/redemptions", requireRole(Role.ADMIN), adminRedemptionsController);
-router.post("/admin/redemptions/validate", requireRole(Role.ADMIN), validateDto(ValidatePickupDto), validatePickupController);
+router.post("/admin/products", requireRole(Role.PrefeituraVendedor), validateDto(CreateProductDto), createProductController);
+router.get("/admin/products", requireRole(Role.PrefeituraVendedor), listAdminProductsController);
+router.post("/admin/ecocoins", requireRole(Role.PrefeituraVendedor), validateDto(GrantEcoCoinDto), grantEcoCoinController);
+router.get("/admin/redemptions", requireRole(Role.PrefeituraVendedor), adminRedemptionsController);
+router.post("/admin/redemptions/validate", requireRole(Role.PrefeituraVendedor), validateDto(ValidatePickupDto), validatePickupController);
 
 export default router;

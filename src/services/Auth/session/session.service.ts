@@ -29,7 +29,7 @@ export async function revokeSession(sessionId: string) {
   });
 }
 
-export async function isSessionActive(sessionId: string, userId: string) {
+export async function getActiveSessionRole(sessionId: string, userId: string) {
   const session = await prisma.session.findFirst({
     where: {
       id: sessionId,
@@ -40,9 +40,9 @@ export async function isSessionActive(sessionId: string, userId: string) {
       },
     },
     select: {
-      id: true,
+      user: { select: { role: true } },
     },
   });
 
-  return Boolean(session);
+  return session?.user.role;
 }
