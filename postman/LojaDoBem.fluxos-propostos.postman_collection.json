@@ -1,0 +1,442 @@
+{
+  "info": {
+    "name": "Loja do Bem - Fluxos propostos",
+    "description": "Contrato proposto. As rotas ainda não estão implementadas.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "email",
+      "value": ""
+    },
+    {
+      "key": "senha",
+      "value": ""
+    },
+    {
+      "key": "codigo",
+      "value": ""
+    },
+    {
+      "key": "nome",
+      "value": ""
+    },
+    {
+      "key": "cpf",
+      "value": ""
+    },
+    {
+      "key": "telefone",
+      "value": ""
+    },
+    {
+      "key": "cep",
+      "value": ""
+    },
+    {
+      "key": "endereco",
+      "value": ""
+    },
+    {
+      "key": "cidade",
+      "value": ""
+    },
+    {
+      "key": "uf",
+      "value": ""
+    },
+    {
+      "key": "tokenCooperativa",
+      "value": ""
+    },
+    {
+      "key": "tokenPrefeituraVendedor",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "productId",
+      "value": ""
+    },
+    {
+      "key": "numero",
+      "value": ""
+    },
+    {
+      "key": "activationToken",
+      "value": ""
+    },
+    {
+      "key": "idempotencyKey",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "USER - Cadastro público",
+      "item": [
+        {
+          "name": "Iniciar cadastro pelo CPF",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/register/user/start",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpf\": \"{{cpf}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Confirmar código recebido por e-mail",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/register/user/verify-code",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpf\": \"{{cpf}}\",\n  \"code\": \"{{codigo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Ativar conta",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/register/user/activate",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationToken\": \"{{activationToken}}\",\n  \"phone\": \"{{telefone}}\",\n  \"state\": \"{{uf}}\",\n  \"password\": \"{{senha}}\",\n  \"passwordConfirmation\": \"{{senha}}\",\n  \"termsAccepted\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "COOPERATIVA",
+      "item": [
+        {
+          "name": "Pré-cadastro",
+          "item": [
+            {
+              "name": "Criar pré-cadastro",
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/users/pre-registrations",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCooperativa}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "name",
+                      "value": "{{nome}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "birthDate",
+                      "value": "1990-05-15",
+                      "type": "text"
+                    },
+                    {
+                      "key": "cep",
+                      "value": "{{cep}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "city",
+                      "value": "{{cidade}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "address",
+                      "value": "{{endereco}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "number",
+                      "value": "{{numero}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "cpf",
+                      "value": "{{cpf}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "email",
+                      "value": "{{email}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "powerOfAttorney",
+                      "type": "file",
+                      "src": [],
+                      "disabled": true,
+                      "description": "PDF opcional. Ative o campo e selecione um arquivo."
+                    }
+                  ]
+                },
+                "description": "O CEP do usuário deve pertencer ao município da Prefeitura vinculada ao operador."
+              }
+            }
+          ]
+        },
+        {
+          "name": "EcoCoins",
+          "item": [
+            {
+              "name": "Creditar EcoCoins",
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/store/cooperativa/ecocoins",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenCooperativa}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{idempotencyKey}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"cpf\": \"{{cpf}}\",\n  \"amount\": \"10.00\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Aceita usuário ativo ou com pré-cadastro pendente. Registra auditoria na mesma transação do crédito. Use uma chave por operação e repita a mesma chave em caso de reenvio. O usuário deve pertencer ao município da Prefeitura vinculada à Cooperativa."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "PrefeituraVendedor",
+      "item": [
+        {
+          "name": "Pré-cadastro",
+          "item": [
+            {
+              "name": "Criar pré-cadastro",
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/users/pre-registrations",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenPrefeituraVendedor}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "name",
+                      "value": "{{nome}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "birthDate",
+                      "value": "1990-05-15",
+                      "type": "text"
+                    },
+                    {
+                      "key": "cep",
+                      "value": "{{cep}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "city",
+                      "value": "{{cidade}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "address",
+                      "value": "{{endereco}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "number",
+                      "value": "{{numero}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "cpf",
+                      "value": "{{cpf}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "email",
+                      "value": "{{email}}",
+                      "type": "text"
+                    },
+                    {
+                      "key": "powerOfAttorney",
+                      "type": "file",
+                      "src": [],
+                      "disabled": true,
+                      "description": "PDF opcional. Ative o campo e selecione um arquivo."
+                    }
+                  ]
+                },
+                "description": "O CEP do usuário deve pertencer ao município da Prefeitura vinculada ao operador."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Vendas",
+          "item": [
+            {
+              "name": "Localizar comprador pelo CPF",
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/store/sales/customers/lookup",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenPrefeituraVendedor}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"cpf\": \"{{cpf}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Localiza o comprador pelo CPF, inclusive se o pré-cadastro ainda estiver pendente. A busca se limita a usuários do município da Prefeitura vinculada ao vendedor."
+              }
+            },
+            {
+              "name": "Registrar venda",
+              "request": {
+                "method": "POST",
+                "url": "{{baseUrl}}/store/sales",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tokenPrefeituraVendedor}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{idempotencyKey}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 1\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "PrefeituraVendedor pode registrar a venda para um usuário ativo ou com pré-cadastro pendente. A venda e a auditoria são gravadas na mesma transação que baixa saldo e estoque. O comprador precisa ativar a conta para comprar por conta própria no app. Comprador, loja e vendedor devem pertencer ao mesmo município. Saldo insuficiente retorna 409. Exemplo: com 5 EcoCoins, uma compra de 6 EcoCoins deve ser bloqueada."
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
