@@ -3,7 +3,8 @@ import { Role } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import { authConfig } from "@/config/env";
 import { AuthTokenPayload } from "@/types/auth.types";
-import { isSessionActive } from "@/services/Auth/session/session.service";
+import { roleLevel } from "@/config/roles";
+import { getActiveSessionRole } from "@/services/Auth/session/session.service";
 
 
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
@@ -22,16 +23,16 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       return res.status(401).json({ message: "Sessão inválida" });
     }
 
-    const sessionActive = await isSessionActive(payload.sid, payload.sub);
-    if (!sessionActive) {
+    const role = await getActiveSessionRole(payload.sid, payload.sub);
+    if (!role) {
       return res.status(401).json({ message: "Sessão expirada ou encerrada" });
     }
 
     req.user = {
       id: payload.sub,
       sessionId: payload.sid,
-      role: payload.role,
-      level: payload.level,
+      role,
+      level: roleLevel(role),
     };
     return next();
   } catch (err) {

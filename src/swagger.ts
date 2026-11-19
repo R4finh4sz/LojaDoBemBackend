@@ -261,7 +261,7 @@ export const swaggerSpec = swaggerJSDoc({
             },
             role: {
               type: "string",
-              enum: ["USER", "ADMIN", "MASTER"],
+              enum: ["USER", "COOPERATIVA", "PrefeituraVendedor", "MASTER"],
             },
             level: {
               type: "number",
@@ -278,7 +278,7 @@ export const swaggerSpec = swaggerJSDoc({
             },
             role: {
               type: "string",
-              enum: ["USER", "ADMIN", "MASTER"],
+              enum: ["USER", "COOPERATIVA", "PrefeituraVendedor", "MASTER"],
             },
             level: {
               type: "number",
@@ -629,7 +629,7 @@ export const swaggerSpec = swaggerJSDoc({
       "/auth/register/admin": {
         post: {
           tags: ["Auth"],
-          summary: "Cadastra um administrador",
+          summary: "Cadastra uma conta PrefeituraVendedor",
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -643,7 +643,7 @@ export const swaggerSpec = swaggerJSDoc({
           },
           responses: {
             201: {
-              description: "Administrador cadastrado",
+              description: "Conta PrefeituraVendedor cadastrada",
               content: {
                 "application/json": {
                   schema: {
