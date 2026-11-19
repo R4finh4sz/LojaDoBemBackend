@@ -6,12 +6,17 @@ import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/services/Auth/email/email.service";
 import { createSession } from "@/services/Auth/session/session.service";
 import { AuthResult, AuthTokenPayload, VerifyTwoFactorInput } from "@/types/auth.types";
+import { TwoFactorChallengeNotFoundError } from "./TwoFactorChallengeNotFoundError";
+import { TwoFactorChallengeExpiredError } from "./TwoFactorChallengeExpiredError";
+import { TwoFactorChallengeBlockedError } from "./TwoFactorChallengeBlockedError";
+import { InvalidTwoFactorCodeError } from "./InvalidTwoFactorCodeError";
+import { TwoFactorInactiveUserError } from "./TwoFactorInactiveUserError";
 
-export class TwoFactorChallengeNotFoundError extends Error {}
-export class TwoFactorChallengeExpiredError extends Error {}
-export class TwoFactorChallengeBlockedError extends Error {}
-export class InvalidTwoFactorCodeError extends Error {}
-export class TwoFactorInactiveUserError extends Error {}
+export { TwoFactorChallengeNotFoundError } from "./TwoFactorChallengeNotFoundError";
+export { TwoFactorChallengeExpiredError } from "./TwoFactorChallengeExpiredError";
+export { TwoFactorChallengeBlockedError } from "./TwoFactorChallengeBlockedError";
+export { InvalidTwoFactorCodeError } from "./InvalidTwoFactorCodeError";
+export { TwoFactorInactiveUserError } from "./TwoFactorInactiveUserError";
 
 const CODE_LENGTH = 6;
 

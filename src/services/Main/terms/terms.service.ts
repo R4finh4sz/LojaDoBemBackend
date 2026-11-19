@@ -2,10 +2,13 @@ import { Prisma, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { CreateTermDto } from "@/dto/terms/create-term.dto";
 import { UpdateTermDto } from "@/dto/terms/update-term.dto";
+import { TermNotFoundError } from "./TermNotFoundError";
+import { CurrentTermNotFoundError } from "./CurrentTermNotFoundError";
+import { TermAlreadyAcceptedError } from "./TermAlreadyAcceptedError";
 
-export class TermNotFoundError extends Error {}
-export class CurrentTermNotFoundError extends Error {}
-export class TermAlreadyAcceptedError extends Error {}
+export { TermNotFoundError } from "./TermNotFoundError";
+export { CurrentTermNotFoundError } from "./CurrentTermNotFoundError";
+export { TermAlreadyAcceptedError } from "./TermAlreadyAcceptedError";
 
 type TermTypeValue = "USER" | "ADMIN";
 

@@ -9,16 +9,17 @@ import {
   ResetPasswordInput,
   VerifyPasswordResetCodeInput,
 } from "@/types/auth.types";
+import { PasswordResetChallengeNotFoundError } from "./PasswordResetChallengeNotFoundError";
+import { PasswordResetCodeExpiredError } from "./PasswordResetCodeExpiredError";
+import { PasswordResetBlockedError } from "./PasswordResetBlockedError";
+import { InvalidPasswordResetCodeError } from "./InvalidPasswordResetCodeError";
+import { InvalidPasswordResetTokenError } from "./InvalidPasswordResetTokenError";
 
-export class PasswordResetChallengeNotFoundError extends Error {}
-export class PasswordResetCodeExpiredError extends Error {}
-export class PasswordResetBlockedError extends Error {
-  constructor(message: string, public readonly blockedUntil: Date) {
-    super(message);
-  }
-}
-export class InvalidPasswordResetCodeError extends Error {}
-export class InvalidPasswordResetTokenError extends Error {}
+export { PasswordResetChallengeNotFoundError } from "./PasswordResetChallengeNotFoundError";
+export { PasswordResetCodeExpiredError } from "./PasswordResetCodeExpiredError";
+export { PasswordResetBlockedError } from "./PasswordResetBlockedError";
+export { InvalidPasswordResetCodeError } from "./InvalidPasswordResetCodeError";
+export { InvalidPasswordResetTokenError } from "./InvalidPasswordResetTokenError";
 
 const CODE_LIMIT = 1_000_000;
 

@@ -1,8 +1,10 @@
 import nodemailer from "nodemailer";
 import { brevoConfig } from "@/config/env";
+import { EmailConfigurationError } from "./EmailConfigurationError";
+import { EmailDeliveryError } from "./EmailDeliveryError";
 
-export class EmailConfigurationError extends Error {}
-export class EmailDeliveryError extends Error {}
+export { EmailConfigurationError } from "./EmailConfigurationError";
+export { EmailDeliveryError } from "./EmailDeliveryError";
 
 function getEmailErrorMessage(err: unknown) {
   if (err instanceof Error) {

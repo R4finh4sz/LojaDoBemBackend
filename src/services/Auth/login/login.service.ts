@@ -6,9 +6,11 @@ import {
   LoginResult,
 } from "@/types/auth.types";
 import { createSearchHash, decryptSensitiveData } from "@/services/Auth/data-protection/data-protection.service";
+import { InvalidCredentialsError } from "./InvalidCredentialsError";
+import { InactiveUserError } from "./InactiveUserError";
 
-export class InvalidCredentialsError extends Error {}
-export class InactiveUserError extends Error {}
+export { InvalidCredentialsError } from "./InvalidCredentialsError";
+export { InactiveUserError } from "./InactiveUserError";
 
 export async function login({ email, password }: LoginInput): Promise<LoginResult> {
   const user = await prisma.user.findUnique({
