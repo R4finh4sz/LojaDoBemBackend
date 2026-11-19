@@ -2,6 +2,11 @@ import { randomBytes } from "crypto";
 import { Prisma, RedemptionStatus, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decryptSensitiveData } from "@/services/Auth/data-protection/data-protection.service";
+import { InsufficientBalanceError } from "./exceptions/InsufficientBalanceError";
+import { InsufficientStockError } from "./exceptions/InsufficientStockError";
+import { StoreError } from "./exceptions/StoreError";
+
+export { StoreError } from "./exceptions/StoreError";
 
 const REDEMPTION_DAYS = 5;
 const productPublicSelect = {
@@ -12,10 +17,6 @@ const redemptionPublicSelect = {
   id: true, quantity: true, unitPrice: true, totalPrice: true, pickupCode: true,
   status: true, expiresAt: true, completedAt: true, createdAt: true, updatedAt: true,
 } satisfies Prisma.RedemptionSelect;
-
-export class StoreError extends Error {
-  constructor(message: string, public readonly status: number) { super(message); }
-}
 
 function sameLocation(a: { city: string; state: string }, b: { city: string; state: string }) {
   return a.city.trim().toLocaleLowerCase("pt-BR") === b.city.trim().toLocaleLowerCase("pt-BR") &&
@@ -86,9 +87,9 @@ export async function redeemProduct(userId: string, productId: string, quantity:
     if (!sameLocation(decryptedLocation(user), product)) throw new StoreError("Produto indisponível para a sua cidade", 403);
     const total = product.price.mul(quantity);
     const stock = await tx.product.updateMany({ where: { id: productId, active: true, quantity: { gte: quantity } }, data: { quantity: { decrement: quantity } } });
-    if (!stock.count) throw new StoreError("Estoque insuficiente", 409);
+    if (!stock.count) throw new InsufficientStockError();
     const balance = await tx.user.updateMany({ where: { id: userId, active: true, ecoCoinBalance: { gte: total } }, data: { ecoCoinBalance: { decrement: total } } });
-    if (!balance.count) throw new StoreError("Saldo EcoCoin insuficiente", 409);
+    if (!balance.count) throw new InsufficientBalanceError();
     const expiresAt = new Date(Date.now() + REDEMPTION_DAYS * 24 * 60 * 60 * 1000);
     const redemption = await tx.redemption.create({ data: { userId, productId, quantity, unitPrice: product.price, totalPrice: total, pickupCode: randomBytes(6).toString("hex").toUpperCase(), expiresAt } });
     await tx.ecoCoinTransaction.create({ data: { userId, redemptionId: redemption.id, type: "REDEMPTION", amount: total.negated(), description: `Troca por ${product.name}` } });
