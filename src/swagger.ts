@@ -1158,7 +1158,7 @@ export const swaggerSpec = swaggerJSDoc({
           tags: ["EcoCoin"], summary: "Cooperativa credita EcoCoins a um munícipe da mesma cidade", security: [{ bearerAuth: [] }],
           parameters: [{ name: "Idempotency-Key", in: "header", required: true, schema: { type: "string", maxLength: 128 } }],
           requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/MunicipalCreditInput" } } } },
-          responses: { 201: { description: "Crédito registrado" }, 400: { description: "Dados inválidos" }, 403: { description: "Perfil sem acesso" }, 404: { description: "Munícipe não encontrado" }, 409: { description: "Conflito de saldo, concorrência ou chave" } },
+          responses: { 201: { description: "Crédito registrado com protocolo, nome completo do munícipe e saldo atualizado" }, 400: { description: "Dados inválidos" }, 403: { description: "Perfil sem acesso" }, 404: { description: "Munícipe não encontrado" }, 409: { description: "Conflito de saldo, concorrência ou chave" } },
         },
       },
       "/auth/logout": {
