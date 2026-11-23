@@ -1,15 +1,14 @@
 import express from "express";
 import cors from "cors";
-import swaggerUi from "swagger-ui-express";
 import authRoutes from "@/routes/auth.routes";
 import termsRoutes from "@/routes/terms.routes";
 import storeRoutes from "@/routes/store.routes";
 import accountRoutes from "@/routes/account.routes";
 import residentsRoutes from "@/routes/residents.routes";
 import masterRoutes from "@/routes/master.routes";
+import { docsJsonRoutes, docsRoutes } from "@/routes/docs.routes";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { rateLimitMiddleware } from "@/middlewares/security.middleware";
-import { swaggerSpec } from "@/swagger";
 
 export const app = express();
 
@@ -18,10 +17,8 @@ app.use(rateLimitMiddleware);
 app.post("/residents/pre-registrations", express.json({ limit: "3mb" }));
 app.use(express.json());
 
-app.use("/docs", ...swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-app.get("/docs.json", (_req, res) => {
-  res.json(swaggerSpec);
-});
+app.use("/docs", docsRoutes);
+app.use("/docs.json", docsJsonRoutes);
 
 app.use("/auth", authRoutes);
 app.use("/terms", termsRoutes);
