@@ -50,7 +50,7 @@ router.put("/admin/carts/:id/items", seller, (req, res) => respond(res, () => {
   return setCartItem(req.user!.id, uuid.parse(req.params.id), identifier, quantity);
 }));
 router.post("/admin/carts/:id/checkout", seller, (req, res) => respond(res, () => {
-  const { expectedTotal } = z.object({ expectedTotal: z.string().regex(/^\d{1,24}\.\d{2}$/).optional() }).strict().parse(req.body ?? {});
+  const { expectedTotal } = z.object({ expectedTotal: z.string().regex(/^\d{1,24}\.\d{2}$/) }).strict().parse(req.body);
   return checkoutCart(req.user!.id, uuid.parse(req.params.id), expectedTotal);
 }, 201));
 

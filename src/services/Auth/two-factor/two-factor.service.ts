@@ -1,12 +1,10 @@
 import crypto from "crypto";
-import jwt from "jsonwebtoken";
-import { authConfig, securityConfig } from "@/config/env";
-import { roleLevel } from "@/config/roles";
+import { securityConfig } from "@/config/env";
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/services/Auth/email/email.service";
-import { createSession } from "@/services/Auth/session/session.service";
+import { issueSessionToken } from "@/services/Auth/session/session.service";
 import type { SessionMetadata } from "@/services/Auth/session/session-metadata";
-import { AuthResult, AuthTokenPayload, VerifyTwoFactorInput } from "@/types/auth.types";
+import { AuthResult, VerifyTwoFactorInput } from "@/types/auth.types";
 import { TwoFactorChallengeNotFoundError } from "./TwoFactorChallengeNotFoundError";
 import { TwoFactorChallengeExpiredError } from "./TwoFactorChallengeExpiredError";
 import { TwoFactorChallengeBlockedError } from "./TwoFactorChallengeBlockedError";
@@ -110,12 +108,13 @@ export async function verifyTwoFactorChallenge(challengeId: string, code: string
           id: true,
           role: true,
           active: true,
+          twoFactorEnabled: true,
         },
       },
     },
   });
 
-  if (!challenge || challenge.consumedAt) {
+  if (!challenge || challenge.consumedAt || !challenge.user.twoFactorEnabled) {
     throw new TwoFactorChallengeNotFoundError("Desafio 2FA não encontrado");
   }
 
@@ -149,7 +148,7 @@ export async function verifyTwoFactorChallenge(challengeId: string, code: string
   }
 
   const consumed = await prisma.twoFactorChallenge.updateMany({
-    where: { id: challenge.id, consumedAt: null, expiresAt: { gt: new Date() }, attempts: { lt: securityConfig.twoFactorMaxAttempts } },
+    where: { id: challenge.id, consumedAt: null, expiresAt: { gt: new Date() }, attempts: { lt: securityConfig.twoFactorMaxAttempts }, user: { twoFactorEnabled: true } },
     data: {
       consumedAt: new Date(),
     },
@@ -166,17 +165,5 @@ export async function verifyTwoFactor({ challengeId, code }: VerifyTwoFactorInpu
     throw new TwoFactorInactiveUserError("Usuário desativado");
   }
 
-  const level = roleLevel(user.role);
-  const session = await createSession(user.id, metadata);
-  const payload: AuthTokenPayload = {
-    sub: user.id,
-    sid: session.id,
-    role: user.role,
-    level,
-  };
-  const token = jwt.sign(payload, authConfig.jwtSecret, {
-    expiresIn: authConfig.jwtExpiresIn,
-  } as jwt.SignOptions);
-
-  return { token };
+  return issueSessionToken(user, metadata);
 }

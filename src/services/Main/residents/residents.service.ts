@@ -10,7 +10,7 @@ import { decryptedLocation, resolveMunicipality, sameLocation } from "./municipa
 
 export async function createResident(actorId: string, input: {
   name: string; cpf: string; birthDate: Date; cep: string;
-  address: string; addressNumber: string; email: string; authorizationDocument?: string;
+  address: string; addressNumber: string; email: string; authorizationDocument: string;
 }) {
   const location = await resolveMunicipality(input.cep);
   const actor = await prisma.user.findUnique({ where: { id: actorId, active: true, role: Role.PrefeituraVendedor } });
@@ -32,7 +32,7 @@ export async function createResident(actorId: string, input: {
       address: encryptSensitiveData(input.address),
       addressNumber: encryptSensitiveData(input.addressNumber),
       // Reuse the existing encrypted column for all supported document formats.
-      authorizationPdf: input.authorizationDocument ? encryptSensitiveData(input.authorizationDocument) : undefined,
+      authorizationPdf: encryptSensitiveData(input.authorizationDocument),
       city: encryptSensitiveData(location.city),
       state: encryptSensitiveData(location.state),
       phone: "",

@@ -25,12 +25,12 @@ export interface ResetPasswordInput {
   passwordConfirmation: string;
 }
 
-export interface LoginResult {
+export type LoginResult = {
   twoFactorRequired: true;
   challengeId: string;
   expiresAt: Date;
   message: string;
-}
+} | (AuthResult & { twoFactorRequired: false });
 
 export interface AuthResult {
   token: string;

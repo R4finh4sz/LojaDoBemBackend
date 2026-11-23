@@ -16,16 +16,18 @@ const router = Router();
 const cpf = registerFields.shape.cpf;
 const id = z.string().uuid();
 const passwordFields = registerFields.pick({ phone: true, password: true, passwordConfirmation: true, termsAccepted: true });
-const residentFields = registerFields.pick({ cpf: true, name: true, birthDate: true, cep: true, address: true, email: true }).extend({
+const residentFields = registerFields.pick({ cpf: true, name: true, birthDate: true, cep: true, address: true, email: true, termsAccepted: true }).extend({
   addressNumber: z.string().trim().min(1).max(30),
   authorizationDocument: authorizationDocument.optional(),
   authorizationPdf: legacyAuthorizationPdf.optional(),
-}).refine(({ authorizationDocument, authorizationPdf }) => !(authorizationDocument && authorizationPdf), {
-  message: "Envie apenas um termo assinado",
-  path: ["authorizationDocument"],
-}).transform(({ authorizationDocument, authorizationPdf, ...resident }) => ({
-  ...resident, authorizationDocument: authorizationDocument ?? authorizationPdf,
-}));
+}).transform(({ authorizationDocument, authorizationPdf, termsAccepted: _termsAccepted, ...resident }, ctx) => {
+  const document = authorizationDocument ?? authorizationPdf;
+  if (!document || (authorizationDocument && authorizationPdf)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Envie exatamente um termo assinado", path: ["authorizationDocument"] });
+    return z.NEVER;
+  }
+  return { ...resident, authorizationDocument: document };
+});
 
 function requestKey(req: Request) {
   return createSearchHash(z.string().trim().min(1).max(128).parse(req.get("Idempotency-Key")));

@@ -73,6 +73,7 @@ model User {
   email                      String
   emailHash                  String?                  @unique
   password                   String
+  twoFactorEnabled           Boolean                  @default(false)
   role                       Role                     @default(USER)
   active                     Boolean                  @default(true)
   pendingActivation          Boolean                  @default(false)
