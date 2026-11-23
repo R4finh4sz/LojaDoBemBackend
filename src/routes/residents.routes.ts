@@ -8,7 +8,7 @@ import { createSearchHash } from "@/services/Auth/data-protection/data-protectio
 import { UserAlreadyExistsError } from "@/services/Auth/register/register.service";
 import { activateResident, confirmActivation, createResident, findResident, startActivation } from "@/services/Main/residents/residents.service";
 import { AccountError, eraseAccount } from "@/services/Main/account/account.service";
-import { creditResident, registerMunicipalSale } from "@/services/Main/store/municipal-sales.service";
+import { creditResident } from "@/services/Main/store/municipal-credit.service";
 import { StoreError } from "@/services/Main/store/exceptions/StoreError";
 
 const router = Router();
@@ -78,10 +78,8 @@ router.post("/credits", requireRole(Role.COOPERATIVA), handle(async (req) => {
   const input = z.object({ cpf, amount: z.string().regex(/^\d{1,10}(\.\d{1,2})?$/).refine((amount) => Number(amount) > 0) }).parse(req.body);
   return creditResident(req.user!.id, input.cpf, input.amount, requestKey(req));
 }, 201));
-router.post("/sales", requireRole(Role.PrefeituraVendedor), handle(async (req) => {
-  const input = z.object({ userId: id, productId: id, quantity: z.number().int().min(1).max(2_147_483_647) }).parse(req.body);
-  return registerMunicipalSale(req.user!.id, input.userId, input.productId, input.quantity, requestKey(req));
-}, 201));
+router.post("/sales", requireRole(Role.PrefeituraVendedor), (_req, res) =>
+  res.status(410).json({ message: "Registre a venda pelo checkout do carrinho em /store/admin/carts/:id/checkout" }));
 router.get("/audit/:userId", requireRole(Role.MASTER, Role.USER), handle(async (req) => {
   const userId = id.parse(req.params.userId);
   if (req.user!.role === Role.USER && req.user!.id !== userId) throw new StoreError("Acesso negado", 403);
@@ -90,7 +88,7 @@ router.get("/audit/:userId", requireRole(Role.MASTER, Role.USER), handle(async (
     where: { userId }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: query.offset, take: 100,
     select: {
       id: true, operation: true, actorId: true, userId: true, amount: true, balanceBefore: true,
-      balanceAfter: true, redemptionId: true, productId: true, quantity: true, createdAt: true,
+      balanceAfter: true, cartId: true, redemptionId: true, productId: true, quantity: true, createdAt: true,
     },
   });
 }));

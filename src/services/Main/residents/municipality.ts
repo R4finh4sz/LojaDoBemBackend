@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { decryptSensitiveData } from "@/services/Auth/data-protection/data-protection.service";
 import { StoreError } from "@/services/Main/store/exceptions/StoreError";
 
@@ -11,6 +12,13 @@ export function sameLocation(a: Location, b: Location) {
 
 export function decryptedLocation(value: Location) {
   return { city: decryptSensitiveData(value.city), state: decryptSensitiveData(value.state) };
+}
+
+export function municipalProducts(location: Location): Prisma.ProductWhereInput {
+  return {
+    city: { equals: location.city, mode: "insensitive" },
+    state: { equals: location.state, mode: "insensitive" },
+  };
 }
 
 export async function resolveMunicipality(cep: string): Promise<Location> {

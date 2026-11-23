@@ -14,7 +14,8 @@ function sleep(ms: number) {
 }
 
 function getClientKey(req: Request) {
-  return `${req.ip}:${req.method}:${req.path}`;
+  const path = req.path.replace(/^(\/store\/admin\/carts\/)[^/]+/i, "$1:id");
+  return `${req.ip}:${req.method}:${path}`;
 }
 
 export async function rateLimitMiddleware(req: Request, res: Response, next: NextFunction) {
@@ -34,7 +35,10 @@ export async function rateLimitMiddleware(req: Request, res: Response, next: Nex
 
   record.count += 1;
 
-  if (record.count > securityConfig.rateLimitMaxAttempts) {
+  const maxAttempts = req.path.toLowerCase().startsWith("/store/")
+    ? securityConfig.storeRateLimitMaxAttempts
+    : securityConfig.rateLimitMaxAttempts;
+  if (record.count > maxAttempts) {
     record.blockedUntil = now + securityConfig.bruteForceBlockMs;
     attempts.set(key, record);
     await sleep(securityConfig.bruteForceDelayMs);

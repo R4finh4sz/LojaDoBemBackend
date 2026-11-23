@@ -44,7 +44,7 @@ export async function eraseAccount(userId: string, pendingOnly: boolean, passwor
         where: { id: redemption.productId }, data: { quantity: { increment: redemption.quantity } },
       });
     }
-    await tx.product.updateMany({ where: { adminId: userId }, data: { active: false } });
+    await tx.salesCart.deleteMany({ where: { OR: [{ sellerId: userId }, { buyerId: userId }] } });
     await tx.residentActivation.deleteMany({ where: { userId } });
     await tx.termAccept.deleteMany({ where: { userId } });
     await tx.passwordResetChallenge.deleteMany({ where: { userId } });
