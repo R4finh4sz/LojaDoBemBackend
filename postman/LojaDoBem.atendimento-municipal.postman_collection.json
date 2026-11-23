@@ -1,10 +1,12 @@
 {
   "info": {
     "name": "Loja do Bem — Atendimento municipal",
-    "description": "Configure os tokens e use dados fictícios. Para venda presencial, localize o comprador pelo CPF, abra um carrinho e adicione itens. O carrinho expira em 24 horas e o checkout usa o ID do carrinho para evitar vendas duplicadas. Para créditos e compras pelo app, use uma chave inédita por operação e reutilize-a para testar reenvio. Envie o PDF opcional em authorizationPdf como Base64 puro, até 2 MiB.",
+    "description": "Configure os tokens e use dados fictícios. Preencha authorizationDocument com um termo JPG, PNG ou PDF em Base64 puro, até 2 MiB. Informe o total confirmado em expectedTotal no checkout. O carrinho expira em 24 horas e o checkout usa o ID do carrinho para evitar vendas duplicadas. Para créditos e compras pelo app, use uma chave inédita por operação e reutilize-a para testar reenvio.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
+    { "key": "authorizationDocument", "value": "" },
+    { "key": "expectedTotal", "value": "" },
     {
       "key": "baseUrl",
       "value": "http://localhost:3000"
@@ -297,7 +299,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"cpf\": \"{{cpf}}\",\n  \"name\": \"Munícipe de exemplo\",\n  \"birthDate\": \"1990-05-12\",\n  \"email\": \"{{residentEmail}}\",\n  \"cep\": \"{{cep}}\",\n  \"address\": \"Rua de exemplo\",\n  \"addressNumber\": \"100\"\n}",
+              "raw": "{\n  \"cpf\": \"{{cpf}}\",\n  \"name\": \"Munícipe de exemplo\",\n  \"birthDate\": \"1990-05-12\",\n  \"email\": \"{{residentEmail}}\",\n  \"cep\": \"{{cep}}\",\n  \"address\": \"Rua de exemplo\",\n  \"addressNumber\": \"100\",\n  \"termsAccepted\": true,\n  \"authorizationDocument\": \"{{authorizationDocument}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -388,7 +390,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"cpf\": \"{{cpf}}\",\n  \"name\": \"Munícipe de exemplo\",\n  \"birthDate\": \"1990-05-12\",\n  \"email\": \"{{residentEmail}}\",\n  \"cep\": \"{{cep}}\",\n  \"address\": \"Rua de exemplo\",\n  \"addressNumber\": \"100\"\n}",
+              "raw": "{\n  \"cpf\": \"{{cpf}}\",\n  \"name\": \"Munícipe de exemplo\",\n  \"birthDate\": \"1990-05-12\",\n  \"email\": \"{{residentEmail}}\",\n  \"cep\": \"{{cep}}\",\n  \"address\": \"Rua de exemplo\",\n  \"addressNumber\": \"100\",\n  \"termsAccepted\": true,\n  \"authorizationDocument\": \"{{authorizationDocument}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -752,7 +754,12 @@
                     }
                   ]
                 },
-                "header": [],
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"expectedTotal\": \"{{expectedTotal}}\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
                 "url": "{{baseUrl}}/store/admin/carts/{{cartId}}/checkout"
               }
             },
