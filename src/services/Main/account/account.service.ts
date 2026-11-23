@@ -13,7 +13,7 @@ export class AccountError extends Error {
 export async function deleteAccount(userId: string, password: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { password: true },
+    select: { password: true, role: true },
   });
 
   if (!user) throw new AccountError("Conta não encontrada", 404);
@@ -21,6 +21,7 @@ export async function deleteAccount(userId: string, password: string) {
     throw new AccountError("Senha incorreta", 401);
   }
   await eraseAccount(userId, false, user.password);
+  return user.role;
 }
 
 export async function eraseAccount(userId: string, pendingOnly: boolean, passwordHash?: string) {

@@ -1,5 +1,19 @@
 import swaggerJSDoc from "swagger-jsdoc";
 
+const bearer = [{ bearerAuth: [] }];
+const uuid = { type: "string", format: "uuid" };
+const quantity = { type: "integer", minimum: 0, maximum: 2_147_483_647 };
+const barcode = { type: "string", maxLength: 64, example: "0012345678905" };
+const cpf = { type: "string", description: "CPF do munícipe" };
+const jsonBody = (properties: Record<string, object>, required = Object.keys(properties)) => ({
+  required: true,
+  content: { "application/json": { schema: { type: "object", required, properties } } },
+});
+const pathId = (name = "id") => ({ name, in: "path", required: true, schema: uuid });
+const seller = { tags: ["Administração da Loja"], security: bearer, description: "Exclusivo de PrefeituraVendedor. A operação fica restrita ao município do vendedor." };
+const residents = { tags: ["Atendimento municipal"], security: bearer };
+const activation = { tags: ["Ativação de conta"] };
+
 export const swaggerSpec = swaggerJSDoc({
   definition: {
     openapi: "3.0.0",
@@ -10,8 +24,8 @@ export const swaggerSpec = swaggerJSDoc({
     },
     servers: [
       {
-        url: "http://localhost:3000",
-        description: "Servidor local",
+        url: "/",
+        description: "Servidor atual",
       },
     ],
     components: {
@@ -497,6 +511,7 @@ export const swaggerSpec = swaggerJSDoc({
           type: "object",
           properties: {
             id: { type: "string", format: "uuid" },
+            cartId: { ...uuid, nullable: true },
             quantity: { type: "integer" },
             unitPrice: { type: "string", format: "decimal" },
             totalPrice: { type: "string", format: "decimal" },
@@ -505,7 +520,7 @@ export const swaggerSpec = swaggerJSDoc({
             expiresAt: { type: "string", format: "date-time", description: "Expira cinco dias após a troca" },
             completedAt: { type: "string", format: "date-time", nullable: true },
             product: { $ref: "#/components/schemas/StoreProduct" },
-            user: { type: "object", description: "Disponível somente ao administrador responsável", properties: { name: { type: "string" } } },
+            user: { type: "object", description: "Disponível na consulta do vendedor do município", properties: { name: { type: "string" } } },
           },
         },
         ErrorResponse: {
@@ -537,6 +552,53 @@ export const swaggerSpec = swaggerJSDoc({
       },
     },
     paths: {
+      "/account/sessions": {
+        get: {
+          tags: ["Conta e LGPD"],
+          summary: "Lista o histórico de acesso da própria conta",
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: "page", in: "query", schema: { type: "integer", minimum: 1, default: 1 } },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 10 } },
+          ],
+          responses: {
+            200: { description: "Sessões e paginação", content: { "application/json": { example: {
+              sessions: [{
+                id: "81e4340d-cc38-4f9d-951a-28cd8af414bf", createdAt: "2026-11-23T13:32:00.000Z",
+                expiresAt: "2026-11-23T14:32:00.000Z", revokedAt: null, browser: "Chrome",
+                device: "Windows", city: "São Paulo", region: "SP", status: "CURRENT",
+              }],
+              pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
+            } } } },
+            400: { description: "Paginação inválida" },
+            401: { description: "Sessão ausente, expirada ou inválida" },
+          },
+        },
+      },
+      "/master/dashboard": {
+        get: {
+          tags: ["MASTER"],
+          summary: "Consulta indicadores administrativos e saúde atual do sistema",
+          security: [{ bearerAuth: [] }],
+          responses: {
+            200: { description: "Cadastros, EcoCoins, eventos de segurança, atividades recentes e saúde atual", content: { "application/json": { example: {
+              generatedAt: "2026-11-23T13:32:00.000Z", lastRegistration: null,
+              pointsDistributed: { periodStart: "2026-11-01T03:00:00.000Z", total: "120", currentMonth: "120", previousMonth: "0", changePercent: null },
+              threats: { blocked: 0, periodStart: "2026-11-01T03:00:00.000Z" },
+              rateLimit: { sanctions: 0, activeClients: 0, periodStart: "2026-11-01T03:00:00.000Z" },
+              recentActivity: [],
+              systemHealth: {
+                api: { status: "UP", checkedAt: "2026-11-23T13:32:00.000Z", availabilityPercent: null },
+                authentication: { status: "UP", checkedAt: "2026-11-23T13:32:00.000Z", availabilityPercent: null },
+                processing: { status: "UNKNOWN", availabilityPercent: null, jobs: [] },
+              },
+            } } } },
+            401: { description: "Sessão ausente, expirada ou inválida" },
+            403: { description: "Rota exclusiva do MASTER" },
+            503: { description: "Painel temporariamente indisponível" },
+          },
+        },
+      },
       "/account/export": {
         get: {
           tags: ["Conta e LGPD"],
@@ -555,18 +617,19 @@ export const swaggerSpec = swaggerJSDoc({
       "/account": {
         delete: {
           tags: ["Conta e LGPD"],
-          summary: "Exclui definitivamente a conta após confirmar a senha",
+          summary: "Exclui a conta após confirmar a senha",
+          description: "A exclusão do único MASTER encerra a API após a resposta. A inicialização fica bloqueada até a restauração dessa conta.",
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
             content: { "application/json": { schema: { $ref: "#/components/schemas/DeleteAccountInput" } } },
           },
           responses: {
-            204: { description: "Conta e dados vinculados excluídos" },
+            204: { description: "Acesso e dados pessoais removidos. Registros de auditoria preservados." },
             400: { description: "Senha não informada ou inválida" },
             401: { description: "Não autenticado ou senha incorreta" },
             404: { description: "Conta não encontrada" },
-            409: { description: "A conta ainda administra produtos que precisam ser transferidos" },
+            409: { description: "Conflito com uma operação concorrente" },
           },
         },
       },
@@ -1078,10 +1141,119 @@ export const swaggerSpec = swaggerJSDoc({
           responses: { 201: { description: "Crédito registrado" }, 400: { description: "Dados inválidos" }, 403: { description: "Perfil sem acesso" }, 404: { description: "Munícipe não encontrado" }, 409: { description: "Conflito de saldo, concorrência ou chave" } },
         },
       },
+      "/auth/logout": {
+        post: { tags: ["Auth"], summary: "Encerra a sessão atual", security: bearer,
+          responses: { 204: { description: "Sessão encerrada" }, 401: { description: "Sessão inválida" } },
+        },
+      },
+      "/residents/activation/start": {
+        post: { ...activation, summary: "Solicita código para um pré-cadastro",
+          requestBody: jsonBody({ cpf }),
+          responses: { 202: { description: "Solicitação recebida com challengeId" }, 400: { description: "CPF inválido" } },
+        },
+      },
+      "/residents/activation/confirm": {
+        post: { ...activation, summary: "Confirma o código de ativação",
+          requestBody: jsonBody({ challengeId: uuid, code: { type: "string", pattern: "^[0-9]{6}$" } }),
+          responses: { 200: { description: "Token de ativação e dados do pré-cadastro" }, 400: { description: "Código inválido ou expirado" } },
+        },
+      },
+      "/residents/activation/complete": {
+        post: { ...activation, summary: "Ativa a conta do munícipe",
+          requestBody: jsonBody({
+            challengeId: uuid, activationToken: { type: "string", pattern: "^[a-f0-9]{64}$" },
+            phone: { type: "string" }, password: { type: "string", format: "password", minLength: 8 },
+            passwordConfirmation: { type: "string", format: "password", minLength: 8 }, termsAccepted: { type: "boolean", enum: [true] },
+          }),
+          responses: { 200: { description: "Conta ativada com o ID original" }, 400: { description: "Dados inválidos ou ativação expirada" } },
+        },
+      },
+      "/residents/pre-registrations": {
+        post: { ...residents, summary: "Pré-cadastra munícipe do mesmo município",
+          description: "Disponível para COOPERATIVA e PrefeituraVendedor.",
+          requestBody: jsonBody({
+            cpf, name: { type: "string" }, birthDate: { type: "string", format: "date" },
+            cep: { type: "string" }, address: { type: "string" }, addressNumber: { type: "string" },
+            email: { type: "string", format: "email" },
+            authorizationPdf: { type: "string", format: "byte", description: "PDF opcional de até 2 MiB" },
+          }, ["cpf", "name", "birthDate", "cep", "address", "addressNumber", "email"]),
+          responses: { 201: { description: "Pré-cadastro criado" }, 400: { description: "Dados inválidos" }, 403: { description: "Perfil ou município sem acesso" }, 409: { description: "CPF ou e-mail em uso" } },
+        },
+      },
+      "/residents/pre-registrations/{id}": {
+        delete: { ...residents, summary: "Exclui um pré-cadastro pendente como MASTER", parameters: [pathId()],
+          responses: { 204: { description: "Pré-cadastro excluído" }, 403: { description: "Rota exclusiva do MASTER" }, 404: { description: "Pré-cadastro pendente não encontrado" } },
+        },
+      },
+      "/residents/lookup": {
+        post: { ...residents, summary: "Localiza munícipe por CPF",
+          description: "PrefeituraVendedor consulta o próprio município. MASTER consulta pré-cadastros pendentes.",
+          requestBody: jsonBody({ cpf }),
+          responses: { 200: { description: "ID, saldo e estado de ativação do munícipe" }, 404: { description: "Munícipe não encontrado" } },
+        },
+      },
+      "/residents/sales": {
+        post: { ...residents, deprecated: true, summary: "Venda direta desativada",
+          responses: { 410: { description: "Use POST /store/admin/carts/{id}/checkout" } },
+        },
+      },
+      "/residents/audit/{userId}": {
+        get: { ...residents, summary: "Consulta registros de movimentação",
+          description: "MASTER consulta qualquer munícipe. USER consulta a própria conta.",
+          parameters: [pathId("userId"), { name: "offset", in: "query", schema: { type: "integer", minimum: 0, default: 0 } }],
+          responses: { 200: { description: "Até 100 registros de auditoria" }, 403: { description: "Acesso negado" } },
+        },
+      },
+      "/store/admin/export.xlsx": {
+        get: { ...seller, summary: "Exporta estoque e vendas do município em Excel",
+          responses: { 200: { description: "Planilha Excel", content: {
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { schema: { type: "string", format: "binary" } },
+          } } },
+        },
+      },
+      "/store/admin/products/{id}/stock": {
+        patch: { ...seller, summary: "Atualiza a quantidade em estoque", parameters: [pathId()],
+          requestBody: jsonBody({ expectedQuantity: quantity, quantity }),
+          responses: { 200: { description: "Produto atualizado" }, 404: { description: "Produto não encontrado" }, 409: { description: "Quantidade atual diverge da informada" } },
+        },
+      },
+      "/store/admin/carts": {
+        get: { ...seller, summary: "Lista carrinhos abertos do vendedor",
+          responses: { 200: { description: "Carrinhos disponíveis" } } },
+        post: { ...seller, summary: "Abre um carrinho de 24 horas para um comprador",
+          requestBody: jsonBody({ buyerId: uuid }),
+          responses: { 201: { description: "Carrinho criado" }, 404: { description: "Comprador não encontrado no município" } },
+        },
+      },
+      "/store/admin/carts/{id}": {
+        get: { ...seller, summary: "Consulta um carrinho aberto", parameters: [pathId()],
+          responses: { 200: { description: "Carrinho e seus itens" }, 404: { description: "Carrinho não encontrado ou expirado" } },
+        },
+        delete: { ...seller, summary: "Cancela um carrinho aberto", parameters: [pathId()],
+          responses: { 204: { description: "Carrinho cancelado" }, 404: { description: "Carrinho não encontrado ou expirado" } },
+        },
+      },
+      "/store/admin/carts/{id}/items": {
+        put: { ...seller, summary: "Define a quantidade de um item", parameters: [pathId()],
+          description: "Envie productId ou barcode. Quantidade zero remove o item.",
+          requestBody: {
+            required: true, content: { "application/json": { schema: { oneOf: [
+              { type: "object", required: ["productId", "quantity"], additionalProperties: false, properties: { productId: uuid, quantity } },
+              { type: "object", required: ["barcode", "quantity"], additionalProperties: false, properties: { barcode, quantity } },
+            ] } } },
+          },
+          responses: { 200: { description: "Carrinho atualizado" }, 404: { description: "Carrinho ou produto não encontrado" }, 409: { description: "Estoque insuficiente ou limite de itens" } },
+        },
+      },
+      "/store/admin/carts/{id}/checkout": {
+        post: { ...seller, summary: "Conclui a venda do carrinho", parameters: [pathId()],
+          responses: { 201: { description: "Recibo da venda. Repetir o mesmo ID devolve o recibo existente." }, 404: { description: "Carrinho não encontrado ou expirado" }, 409: { description: "Carrinho vazio, saldo ou estoque insuficiente" } },
+        },
+      },
       "/store/admin/redemptions": {
         get: {
           tags: ["Administração da Loja"], summary: "Lista trocas dos produtos do administrador", security: [{ bearerAuth: [] }],
-          responses: { 200: { description: "Trocas da loja", content: { "application/json": { schema: { type: "object", properties: { redemptions: { type: "array", items: { $ref: "#/components/schemas/Redemption" } } } } } } }, 401: { description: "Não autenticado" }, 403: { description: "Disponível somente para ADMIN" } },
+          responses: { 200: { description: "Trocas do município", content: { "application/json": { schema: { type: "object", properties: { redemptions: { type: "array", items: { $ref: "#/components/schemas/Redemption" } } } } } } }, 401: { description: "Não autenticado" }, 403: { description: "Disponível para PrefeituraVendedor" } },
         },
       },
       "/store/admin/redemptions/validate": {

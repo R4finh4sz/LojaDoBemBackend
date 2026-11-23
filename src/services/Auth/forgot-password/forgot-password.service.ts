@@ -14,6 +14,7 @@ import { PasswordResetCodeExpiredError } from "./PasswordResetCodeExpiredError";
 import { PasswordResetBlockedError } from "./PasswordResetBlockedError";
 import { InvalidPasswordResetCodeError } from "./InvalidPasswordResetCodeError";
 import { InvalidPasswordResetTokenError } from "./InvalidPasswordResetTokenError";
+import { isConfiguredMaster } from "@/services/Main/master/master-bootstrap.service";
 
 export { PasswordResetChallengeNotFoundError } from "./PasswordResetChallengeNotFoundError";
 export { PasswordResetCodeExpiredError } from "./PasswordResetCodeExpiredError";
@@ -38,10 +39,10 @@ function addHours(hours: number) {
 export async function requestPasswordReset({ email }: ForgotPasswordInput) {
   const user = await prisma.user.findUnique({
     where: { emailHash: createSearchHash(email) },
-    select: { id: true, email: true, name: true, active: true },
+    select: { id: true, email: true, name: true, active: true, role: true, emailHash: true },
   });
 
-  if (!user || !user.active) {
+  if (!user || !user.active || isConfiguredMaster(user)) {
     return {
       challengeId: crypto.randomUUID(),
       expiresAt: addMinutes(securityConfig.passwordResetCodeExpiresMinutes),
@@ -160,12 +161,12 @@ export async function resetPassword({ resetToken, password }: ResetPasswordInput
           resetTokenHash: { not: null },
           resetTokenSalt: { not: null },
         },
-        select: { id: true, userId: true, resetTokenHash: true, resetTokenSalt: true },
+        select: { id: true, userId: true, resetTokenHash: true, resetTokenSalt: true, user: { select: { role: true, emailHash: true } } },
       })
     : null;
 
   if (
-    !challenge ||
+    !challenge || isConfiguredMaster(challenge.user) ||
     digest(tokenSecret, challenge.resetTokenSalt!) !== challenge.resetTokenHash
   ) {
     throw new InvalidPasswordResetTokenError("Token de redefinição inválido ou expirado");

@@ -14,6 +14,31 @@ enum Role {
   MASTER
 }
 
+enum SecurityEventKind {
+  RATE_LIMIT_BLOCK
+  TWO_FACTOR_BLOCK
+}
+
+model MasterIdentity {
+  id     Int    @id
+  userId String
+
+  @@map("master_identity")
+}
+
+model SecurityEvent {
+  id          String            @id @default(uuid())
+  kind        SecurityEventKind
+  clientKey   String?
+  blockedUntil DateTime
+  createdAt   DateTime          @default(now())
+
+  @@index([kind, createdAt])
+  @@index([kind, blockedUntil, clientKey])
+  @@index([createdAt])
+  @@map("security_events")
+}
+
 enum TermType {
   USER
   ADMIN
@@ -228,10 +253,15 @@ model Session {
   userId    String
   expiresAt DateTime
   revokedAt DateTime?
+  browser   String?
+  device    String?
+  city      String?
+  region    String?
   createdAt DateTime  @default(now())
   user      User      @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([userId, createdAt, id])
   @@index([expiresAt])
   @@map("sessions")
 }

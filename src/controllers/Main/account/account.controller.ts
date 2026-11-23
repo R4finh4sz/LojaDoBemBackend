@@ -1,6 +1,9 @@
 import { Request, Response } from "express";
 import { AccountError, deleteAccount, exportAccountPdf } from "@/services/Main/account/account.service";
 import { StoreError } from "@/services/Main/store/exceptions/StoreError";
+import { z } from "zod";
+import { listSessionHistory } from "@/services/Auth/session/session.service";
+import { Role } from "@prisma/client";
 
 function handleError(res: Response, error: unknown) {
   if (error instanceof AccountError || error instanceof StoreError) return res.status(error.status).json({ message: error.message });
@@ -8,9 +11,29 @@ function handleError(res: Response, error: unknown) {
   return res.status(500).json({ message: "Erro interno ao processar a conta" });
 }
 
+const historyQuery = z.object({
+  page: z.coerce.number().int().min(1).max(20_000_000).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+}).strict();
+
+export async function listSessionHistoryController(req: Request, res: Response) {
+  const query = historyQuery.safeParse(req.query);
+  if (!query.success) return res.status(400).json({ message: "Paginação inválida", errors: query.error.flatten().fieldErrors });
+
+  try {
+    const { id, sessionId } = req.user!;
+    const { page, limit } = query.data;
+    res.setHeader("Cache-Control", "no-store");
+    return res.json(await listSessionHistory(id, sessionId, page, limit));
+  } catch (error) {
+    return handleError(res, error);
+  }
+}
+
 export async function deleteAccountController(req: Request, res: Response) {
   try {
-    await deleteAccount(req.user!.id, req.body.password);
+    const role = await deleteAccount(req.user!.id, req.body.password);
+    if (role === Role.MASTER) res.once("finish", () => req.app.emit("masterDeleted"));
     return res.status(204).send();
   } catch (error) {
     return handleError(res, error);

@@ -12,10 +12,16 @@ export const authConfig = {
   jwtSecret: getRequiredEnv("JWT_SECRET"),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "1h",
   sessionExpiresMinutes: Number(process.env.SESSION_EXPIRES_MINUTES || 60),
+  sessionLocationProxySecret: process.env.SESSION_LOCATION_PROXY_SECRET,
 };
 
 export const dataProtectionConfig = {
   encryptionKey: getRequiredEnv("DATA_ENCRYPTION_KEY"),
+};
+
+export const masterConfig = {
+  email: process.env.MASTER_EMAIL?.trim().toLowerCase(),
+  password: process.env.MASTER_PASSWORD,
 };
 
 export const brevoConfig = {
