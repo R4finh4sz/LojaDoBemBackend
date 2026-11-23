@@ -69,6 +69,7 @@ export const swaggerSpec = swaggerJSDoc({
             birthDate: {
               type: "string",
               format: "date",
+              description: "A idade no cadastro deve estar entre 18 e 90 anos, inclusive.",
               example: "1990-05-20",
             },
             phone: {
@@ -1191,7 +1192,7 @@ export const swaggerSpec = swaggerJSDoc({
         post: { ...residents, summary: "Pré-cadastra munícipe do mesmo município",
           description: "Disponível para COOPERATIVA e PrefeituraVendedor.",
           requestBody: jsonBody({
-            cpf, name: { type: "string" }, birthDate: { type: "string", format: "date" },
+            cpf, name: { type: "string" }, birthDate: { type: "string", format: "date", description: "Idade de 18 a 90 anos, inclusive." },
             cep: { type: "string" }, address: { type: "string" }, addressNumber: { type: "string" },
             email: { type: "string", format: "email" },
             authorizationPdf: { type: "string", format: "byte", description: "PDF opcional de até 2 MiB" },

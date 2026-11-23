@@ -3,7 +3,7 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { authMiddleware, requireRole } from "@/middlewares/auth.middleware";
-import { ageInYears, registerFields } from "@/validation/register.validation";
+import { registerFields } from "@/validation/register.validation";
 import { createSearchHash } from "@/services/Auth/data-protection/data-protection.service";
 import { UserAlreadyExistsError } from "@/services/Auth/register/register.service";
 import { activateResident, confirmActivation, createResident, findResident, startActivation } from "@/services/Main/residents/residents.service";
@@ -22,10 +22,7 @@ const residentFields = registerFields.pick({ cpf: true, name: true, birthDate: t
     return pdf.length <= 2 * 1024 * 1024 && pdf.toString("base64") === value &&
       pdf.subarray(0, 5).toString() === "%PDF-" && pdf.subarray(-1024).includes(Buffer.from("%%EOF"));
   }, "Informe um PDF válido de até 2 MiB em Base64").optional(),
-}).refine(({ birthDate }) => {
-  const age = ageInYears(birthDate);
-  return age >= 18 && age <= 100;
-}, { message: "Idade deve ser de 18 a 100 anos", path: ["birthDate"] });
+});
 
 function requestKey(req: Request) {
   return createSearchHash(z.string().trim().min(1).max(128).parse(req.get("Idempotency-Key")));
