@@ -12,11 +12,13 @@ O estado de autenticação considera a sessão do próprio pedido, e processamen
 
 Use `GET /account/sessions?page=1&limit=10` com o token da conta. A resposta traz `sessions` da mais recente à mais antiga e `pagination` com `page`, `limit`, `total` e `totalPages`. Os estados são `CURRENT` (sessão atual), `ACTIVE` (outra sessão aberta), `REVOKED` (encerrada) e `EXPIRED` (expirada).
 
-Navegador e dispositivo são reconhecidos pelo User-Agent da verificação 2FA de sessões novas. Para preencher cidade e região aproximadas, configure `SESSION_LOCATION_PROXY_SECRET` na API e no proxy de entrada. O proxy deve descartar os cabeçalhos correspondentes recebidos do cliente e enviar seus próprios `X-Session-Location-Secret`, `X-Session-City` e `X-Session-Region` na verificação 2FA. Cidade e região em UTF-8 devem ser codificadas com escape de porcentagem. Campos desconhecidos e metadados de sessões antigas retornam `null`.
+Navegador e dispositivo são reconhecidos pelo User-Agent da requisição que efetiva o login. Para preencher cidade e região aproximadas, configure `SESSION_LOCATION_PROXY_SECRET` na API e no proxy de entrada. O proxy deve descartar os cabeçalhos correspondentes recebidos do cliente e enviar seus próprios `X-Session-Location-Secret`, `X-Session-City` e `X-Session-Region` em `POST /auth/login` e `POST /auth/2fa/verify`. Cidade e região em UTF-8 devem ser codificadas com escape de porcentagem. Campos desconhecidos e metadados de sessões antigas retornam `null`.
 
 ## Cadastros e créditos
 
 Importe `LojaDoBem.atendimento-municipal.postman_collection.json` e configure `baseUrl` e os tokens locais. O cadastro de operadores exige um token do `MASTER` e valida cidade e UF pelo CEP. O cadastro de vendedor também exige CNPJ.
+
+Para pré-cadastrar um munícipe com `sellerToken`, envie `termsAccepted: true` e preencha `authorizationDocument` com o termo assinado em JPG, PNG ou PDF de até 2 MiB, em Base64 puro.
 
 O crédito usa `POST /residents/credits` com token da `COOPERATIVA`. Envie uma chave distinta no cabeçalho `Idempotency-Key` para cada operação e reutilize a chave ao reenviar o mesmo pedido. Compras no app também aceitam esse cabeçalho.
 
@@ -33,6 +35,6 @@ Para listar produtos, use `GET /store/admin/products?page=1`. A lista tem 9 iten
 1. Use a busca de munícipe por CPF na pasta `PrefeituraVendedor` e copie o ID para `userId`.
 2. Crie um carrinho para esse comprador e copie o ID retornado para `cartId`.
 3. Defina a quantidade por item. Use zero para remover o item. O carrinho fica disponível ao vendedor que o abriu por 24 horas a partir da criação, sem reservar estoque.
-4. Finalize em `POST /store/admin/carts/{{cartId}}/checkout`. Se faltar saldo ou estoque, ajuste o carrinho e tente novamente. Após sucesso, repetir o checkout com o mesmo ID devolve o mesmo recibo.
+4. Finalize em `POST /store/admin/carts/{{cartId}}/checkout` com o total confirmado em `expectedTotal`, como texto com duas casas decimais (por exemplo, `"25.00"`). Se receber HTTP 412, consulte o carrinho novamente e confirme o novo total. Se faltar saldo ou estoque, ajuste o carrinho e tente novamente. Após sucesso, reenviar o checkout com o mesmo ID devolve o mesmo recibo.
 
 Use `GET /store/admin/export.xlsx` e salve a resposta como arquivo. A planilha contém o estoque e as vendas e trocas concluídas do município.
