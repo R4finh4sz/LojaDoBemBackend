@@ -8,6 +8,12 @@ Os créditos mensais comparam o mês atual até o momento com o mês anterior co
 
 O estado de autenticação considera a sessão do próprio pedido, e processamento usa a última execução local dos jobs de trocas e carrinhos. `availabilityPercent` é `null` enquanto não houver histórico de monitoramento de disponibilidade.
 
+## Histórico de acesso
+
+Use `GET /account/sessions?page=1&limit=10` com o token da conta. A resposta traz `sessions` da mais recente à mais antiga e `pagination` com `page`, `limit`, `total` e `totalPages`. Os estados são `CURRENT` (sessão atual), `ACTIVE` (outra sessão aberta), `REVOKED` (encerrada) e `EXPIRED` (expirada).
+
+Navegador e dispositivo são reconhecidos pelo User-Agent da verificação 2FA de sessões novas. Para preencher cidade e região aproximadas, configure `SESSION_LOCATION_PROXY_SECRET` na API e no proxy de entrada. O proxy deve descartar os cabeçalhos correspondentes recebidos do cliente e enviar seus próprios `X-Session-Location-Secret`, `X-Session-City` e `X-Session-Region` na verificação 2FA. Cidade e região em UTF-8 devem ser codificadas com escape de porcentagem. Campos desconhecidos e metadados de sessões antigas retornam `null`.
+
 ## Cadastros e créditos
 
 Importe `LojaDoBem.atendimento-municipal.postman_collection.json` e configure `baseUrl` e os tokens locais. O cadastro de operadores exige um token do `MASTER` e valida cidade e UF pelo CEP. O cadastro de vendedor também exige CNPJ.

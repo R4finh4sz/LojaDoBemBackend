@@ -5,6 +5,7 @@ import { roleLevel } from "@/config/roles";
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/services/Auth/email/email.service";
 import { createSession } from "@/services/Auth/session/session.service";
+import type { SessionMetadata } from "@/services/Auth/session/session-metadata";
 import { AuthResult, AuthTokenPayload, VerifyTwoFactorInput } from "@/types/auth.types";
 import { TwoFactorChallengeNotFoundError } from "./TwoFactorChallengeNotFoundError";
 import { TwoFactorChallengeExpiredError } from "./TwoFactorChallengeExpiredError";
@@ -158,7 +159,7 @@ export async function verifyTwoFactorChallenge(challengeId: string, code: string
   return challenge.user;
 }
 
-export async function verifyTwoFactor({ challengeId, code }: VerifyTwoFactorInput): Promise<AuthResult> {
+export async function verifyTwoFactor({ challengeId, code }: VerifyTwoFactorInput, metadata?: SessionMetadata): Promise<AuthResult> {
   const user = await verifyTwoFactorChallenge(challengeId, code);
 
   if (!user.active) {
@@ -166,7 +167,7 @@ export async function verifyTwoFactor({ challengeId, code }: VerifyTwoFactorInpu
   }
 
   const level = roleLevel(user.role);
-  const session = await createSession(user.id);
+  const session = await createSession(user.id, metadata);
   const payload: AuthTokenPayload = {
     sub: user.id,
     sid: session.id,

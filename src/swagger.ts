@@ -537,6 +537,22 @@ export const swaggerSpec = swaggerJSDoc({
       },
     },
     paths: {
+      "/account/sessions": {
+        get: {
+          tags: ["Conta e LGPD"],
+          summary: "Lista o histórico de acesso da própria conta",
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: "page", in: "query", schema: { type: "integer", minimum: 1, default: 1 } },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 10 } },
+          ],
+          responses: {
+            200: { description: "Sessões e paginação, com navegador, dispositivo e localização quando disponíveis" },
+            400: { description: "Paginação inválida" },
+            401: { description: "Sessão ausente, expirada ou inválida" },
+          },
+        },
+      },
       "/master/dashboard": {
         get: {
           tags: ["MASTER"],

@@ -121,6 +121,24 @@
           }
         },
         {
+          "name": "Consultar histórico de acesso",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{masterToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [],
+            "url": "{{baseUrl}}/account/sessions?page=1&limit=10"
+          }
+        },
+        {
           "name": "Cadastrar vendedor",
           "request": {
             "method": "POST",

@@ -12,6 +12,7 @@ export const authConfig = {
   jwtSecret: getRequiredEnv("JWT_SECRET"),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "1h",
   sessionExpiresMinutes: Number(process.env.SESSION_EXPIRES_MINUTES || 60),
+  sessionLocationProxySecret: process.env.SESSION_LOCATION_PROXY_SECRET,
 };
 
 export const dataProtectionConfig = {

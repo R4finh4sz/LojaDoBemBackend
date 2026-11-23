@@ -38,7 +38,7 @@ export async function rateLimitMiddleware(req: Request, res: Response, next: Nex
   record.count += 1;
 
   const path = req.path.toLowerCase();
-  const maxAttempts = path.startsWith("/store/") || path === "/master/dashboard"
+  const maxAttempts = path.startsWith("/store/") || path === "/master/dashboard" || path === "/account/sessions"
     ? securityConfig.storeRateLimitMaxAttempts
     : securityConfig.rateLimitMaxAttempts;
   if (record.count > maxAttempts) {
