@@ -68,6 +68,7 @@ model User {
   city                       String
   state                      String
   profilePhoto               String?
+  jobTitle                   String?
   termsAccepted              Boolean                  @default(false)
   email                      String
   emailHash                  String?                  @unique

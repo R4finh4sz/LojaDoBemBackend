@@ -32,7 +32,7 @@ export async function eraseAccount(userId: string, pendingOnly: boolean, passwor
         deletedAt: new Date(), active: false, pendingActivation: false, termsAccepted: false,
         name: "", cpf: "", cpfHash: null, email: "", emailHash: null, birthDate: "",
         phone: "", cep: "", address: "", city: "", state: "", password: "", cnpj: null,
-        profilePhoto: null, addressNumber: null, authorizationPdf: null, ecoCoinBalance: 0,
+        profilePhoto: null, jobTitle: null, addressNumber: null, authorizationPdf: null, ecoCoinBalance: 0,
       },
     });
     if (!claimed.count) throw new AccountError("Conta não encontrada para exclusão", 404);
@@ -59,9 +59,9 @@ function addField(doc: PDFKit.PDFDocument, label: string, value: unknown) {
   doc.font("Helvetica").text(value === null || value === undefined || value === "" ? "Não informado" : String(value));
 }
 
-export async function exportAccountPdf(userId: string): Promise<Buffer> {
+async function getAccountExport(userId: string) {
   const user = await prisma.user.findUnique({
-    where: { id: userId },
+    where: { id: userId, deletedAt: null },
     include: {
       termAccepts: { include: { term: true }, orderBy: { acceptedAt: "desc" } },
       redemptions: { include: { product: true }, orderBy: { createdAt: "desc" } },
@@ -83,8 +83,34 @@ export async function exportAccountPdf(userId: string): Promise<Buffer> {
     city: decryptSensitiveData(user.city),
     state: decryptSensitiveData(user.state),
     email: decryptSensitiveData(user.email),
+    jobTitle: user.jobTitle ? decryptSensitiveData(user.jobTitle) : null,
     profilePhoto: user.profilePhoto ? decryptSensitiveData(user.profilePhoto) : null,
   };
+
+  return { user, personal };
+}
+
+export async function exportAccountJson(userId: string) {
+  const { user, personal } = await getAccountExport(userId);
+  return {
+    exportedAt: new Date(),
+    account: { ...personal, id: user.id, role: user.role, active: user.active,
+      ecoCoinBalance: user.ecoCoinBalance.toFixed(2), createdAt: user.createdAt, updatedAt: user.updatedAt },
+    terms: user.termAccepts.map(({ acceptedAt, term }) => ({ title: term.title, type: term.type, version: term.version, acceptedAt })),
+    redemptions: user.redemptions.map(({ id, product, quantity, totalPrice, status, createdAt }) => ({
+      id, product: product.name, quantity, totalPrice: totalPrice.toFixed(2), status, createdAt,
+    })),
+    ecoCoinTransactions: user.ecoCoinTransactions.map(({ id, type, amount, description, createdAt }) => ({
+      id, type, amount: amount.toFixed(2), description, createdAt,
+    })),
+    products: user.products.map(({ id, name, description, price, quantity, active, createdAt }) => ({
+      id, name, description, price: price.toFixed(2), quantity, active, createdAt,
+    })),
+  };
+}
+
+export async function exportAccountPdf(userId: string): Promise<Buffer> {
+  const { user, personal } = await getAccountExport(userId);
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 50, size: "A4", info: { Title: "Exportação de dados pessoais" } });
