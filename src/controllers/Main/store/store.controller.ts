@@ -20,9 +20,15 @@ export async function respond(res: Response, action: () => Promise<unknown>, sta
 
 export const createProductController = (req: Request, res: Response) => respond(res, async () => ({ product: await createProduct(req.user!.id, req.body) }), 201);
 export const listProductsController = (req: Request, res: Response) => respond(res, async () => ({ products: await listProductsForUser(req.user!.id) }));
+const adminProductsQuery = z.object({
+  page: z.coerce.number().int().min(1).max(100_000_000).default(1),
+  search: z.string().trim().max(120).optional(),
+  barcode: z.string().trim().regex(barcodePattern).optional(),
+  stock: z.enum(["available", "out"]).optional(),
+});
+
 export const listAdminProductsController = (req: Request, res: Response) => respond(res, async () => {
-  const { barcode } = z.object({ barcode: z.string().trim().regex(barcodePattern).optional() }).parse(req.query);
-  return { products: await listAdminProducts(req.user!.id, barcode) };
+  return listAdminProducts(req.user!.id, adminProductsQuery.parse(req.query));
 });
 export const balanceController = (req: Request, res: Response) => respond(res, async () => ({ balance: await getEcoCoinBalance(req.user!.id), currency: "EcoCoin" }));
 export const redeemController = (req: Request, res: Response) => respond(res, async () => {

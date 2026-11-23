@@ -69,6 +69,7 @@ export const swaggerSpec = swaggerJSDoc({
             birthDate: {
               type: "string",
               format: "date",
+              description: "A idade no cadastro deve estar entre 18 e 90 anos, inclusive.",
               example: "1990-05-20",
             },
             phone: {
@@ -1121,9 +1122,28 @@ export const swaggerSpec = swaggerJSDoc({
           responses: { 201: { description: "Produto criado", content: { "application/json": { schema: { type: "object", properties: { product: { $ref: "#/components/schemas/StoreProduct" } } } } } }, 400: { description: "Dados inválidos" }, 401: { description: "Não autenticado" }, 403: { description: "Disponível para PrefeituraVendedor" }, 409: { description: "Código de barras duplicado no município" } },
         },
         get: {
-          tags: ["Administração da Loja"], summary: "Lista ou busca por código de barras no estoque do município", security: [{ bearerAuth: [] }],
-          parameters: [{ in: "query", name: "barcode", schema: { type: "string", maxLength: 64 } }],
-          responses: { 200: { description: "Produtos do município", content: { "application/json": { schema: { type: "object", properties: { products: { type: "array", items: { $ref: "#/components/schemas/StoreProduct" } } } } } } }, 401: { description: "Não autenticado" }, 403: { description: "Disponível para PrefeituraVendedor" } },
+          tags: ["Administração da Loja"], summary: "Lista e filtra os produtos do município em páginas de 9 itens", security: [{ bearerAuth: [] }],
+          parameters: [
+            { in: "query", name: "page", schema: { type: "integer", minimum: 1, maximum: 100_000_000, default: 1 } },
+            { in: "query", name: "search", description: "Busca por trecho do nome ou descrição", schema: { type: "string", maxLength: 120 } },
+            { in: "query", name: "barcode", description: "Código de barras exato", schema: barcode },
+            { in: "query", name: "stock", description: "available seleciona itens ativos com estoque e out seleciona itens zerados",
+              schema: { type: "string", enum: ["available", "out"] } },
+          ],
+          responses: {
+            200: { description: "Produtos do município e paginação após os filtros", content: { "application/json": { schema: {
+              type: "object", properties: {
+                products: { type: "array", items: { $ref: "#/components/schemas/StoreProduct" } },
+                pagination: { type: "object", properties: {
+                  page: { type: "integer" }, limit: { type: "integer", example: 9 },
+                  total: { type: "integer" }, totalPages: { type: "integer" },
+                } },
+              },
+            } } } },
+            400: { description: "Filtro ou página inválida" },
+            401: { description: "Não autenticado" },
+            403: { description: "Disponível para PrefeituraVendedor" },
+          },
         },
       },
       "/auth/register/cooperative": {
@@ -1172,7 +1192,7 @@ export const swaggerSpec = swaggerJSDoc({
         post: { ...residents, summary: "Pré-cadastra munícipe do mesmo município",
           description: "Disponível para COOPERATIVA e PrefeituraVendedor.",
           requestBody: jsonBody({
-            cpf, name: { type: "string" }, birthDate: { type: "string", format: "date" },
+            cpf, name: { type: "string" }, birthDate: { type: "string", format: "date", description: "Idade de 18 a 90 anos, inclusive." },
             cep: { type: "string" }, address: { type: "string" }, addressNumber: { type: "string" },
             email: { type: "string", format: "email" },
             authorizationPdf: { type: "string", format: "byte", description: "PDF opcional de até 2 MiB" },
@@ -1209,6 +1229,28 @@ export const swaggerSpec = swaggerJSDoc({
           responses: { 200: { description: "Planilha Excel", content: {
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { schema: { type: "string", format: "binary" } },
           } } },
+        },
+      },
+      "/store/admin/dashboard": {
+        get: { ...seller, summary: "Consulta os indicadores do município",
+          responses: {
+            200: {
+              description: "Totais históricos dos pedidos concluídos, até 10 pedidos recentes e até 5 itens mais retirados",
+              content: { "application/json": { example: {
+                municipality: { city: "salesópolis", state: "sp" },
+                ordersCollected: 2, usersServed: 1, pointsRedeemed: "20.00",
+                recentOrders: [{
+                  id: "fb31f074-dc75-4934-a1d9-875ebe2fdb01",
+                  user: { id: "b39b772f-4c82-47f4-8e97-1d13a9702a95", name: "Munícipe de exemplo" },
+                  collectedAt: "2026-11-23T13:32:00.000Z",
+                  items: [{ productId: "e75fc271-1414-47a9-84d5-311017597c69", name: "Ecobag", quantity: 2 }],
+                }],
+                topItems: [{ productId: "e75fc271-1414-47a9-84d5-311017597c69", productName: "Ecobag", units: 3, sharePercent: 75 }],
+              } } },
+            },
+            401: { description: "Sessão inválida" },
+            403: { description: "Rota exclusiva de PrefeituraVendedor" },
+          },
         },
       },
       "/store/admin/products/{id}/stock": {
