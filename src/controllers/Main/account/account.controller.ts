@@ -1,8 +1,9 @@
 import { Request, Response } from "express";
 import { AccountError, deleteAccount, exportAccountPdf } from "@/services/Main/account/account.service";
+import { StoreError } from "@/services/Main/store/exceptions/StoreError";
 
 function handleError(res: Response, error: unknown) {
-  if (error instanceof AccountError) return res.status(error.status).json({ message: error.message });
+  if (error instanceof AccountError || error instanceof StoreError) return res.status(error.status).json({ message: error.message });
   console.error(error);
   return res.status(500).json({ message: "Erro interno ao processar a conta" });
 }

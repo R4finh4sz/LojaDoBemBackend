@@ -35,6 +35,7 @@ export async function getActiveSessionRole(sessionId: string, userId: string) {
       id: sessionId,
       userId,
       revokedAt: null,
+      user: { active: true, deletedAt: null },
       expiresAt: {
         gt: new Date(),
       },

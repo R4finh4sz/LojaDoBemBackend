@@ -2,6 +2,7 @@ import PDFDocument from "pdfkit";
 import { prisma } from "@/lib/prisma";
 import { decryptSensitiveData } from "@/services/Auth/data-protection/data-protection.service";
 import { verifyPassword } from "@/services/Auth/password/password.service";
+import { auditedOperation } from "@/services/Main/store/store-audit.service";
 
 export class AccountError extends Error {
   constructor(message: string, public readonly status: number) {
@@ -12,29 +13,43 @@ export class AccountError extends Error {
 export async function deleteAccount(userId: string, password: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { password: true, products: { select: { id: true }, take: 1 } },
+    select: { password: true },
   });
 
   if (!user) throw new AccountError("Conta não encontrada", 404);
   if (!(await verifyPassword(password, user.password))) {
     throw new AccountError("Senha incorreta", 401);
   }
-  if (user.products.length) {
-    throw new AccountError("Contas que administram produtos devem transferi-los antes da exclusão", 409);
-  }
+  await eraseAccount(userId, false, user.password);
+}
 
-  await prisma.$transaction(async (tx) => {
-    // Remove referências opcionais mantidas em históricos de terceiros.
-    await tx.redemption.updateMany({ where: { validatedById: userId }, data: { validatedById: null } });
-    await tx.ecoCoinTransaction.updateMany({ where: { grantedById: userId }, data: { grantedById: null } });
-
-    await tx.ecoCoinTransaction.deleteMany({ where: { userId } });
-    await tx.redemption.deleteMany({ where: { userId } });
+export async function eraseAccount(userId: string, pendingOnly: boolean, passwordHash?: string) {
+  await auditedOperation(async (tx) => {
+    const claimed = await tx.user.updateMany({
+      where: { id: userId, deletedAt: null, pendingActivation: pendingOnly, password: passwordHash },
+      data: {
+        deletedAt: new Date(), active: false, pendingActivation: false, termsAccepted: false,
+        name: "", cpf: "", cpfHash: null, email: "", emailHash: null, birthDate: "",
+        phone: "", cep: "", address: "", city: "", state: "", password: "", cnpj: null,
+        profilePhoto: null, addressNumber: null, authorizationPdf: null, ecoCoinBalance: 0,
+      },
+    });
+    if (!claimed.count) throw new AccountError("Conta não encontrada para exclusão", 404);
+    const pending = await tx.redemption.findMany({ where: { userId, status: "PENDING" } });
+    for (const redemption of pending) {
+      await tx.redemption.update({
+        where: { id: redemption.id }, data: { status: "EXPIRED", pickupCode: null },
+      });
+      await tx.product.update({
+        where: { id: redemption.productId }, data: { quantity: { increment: redemption.quantity } },
+      });
+    }
+    await tx.product.updateMany({ where: { adminId: userId }, data: { active: false } });
+    await tx.residentActivation.deleteMany({ where: { userId } });
     await tx.termAccept.deleteMany({ where: { userId } });
     await tx.passwordResetChallenge.deleteMany({ where: { userId } });
     await tx.twoFactorChallenge.deleteMany({ where: { userId } });
     await tx.session.deleteMany({ where: { userId } });
-    await tx.user.delete({ where: { id: userId } });
   });
 }
 
@@ -62,6 +77,8 @@ export async function exportAccountPdf(userId: string): Promise<Buffer> {
     phone: decryptSensitiveData(user.phone),
     cep: decryptSensitiveData(user.cep),
     address: decryptSensitiveData(user.address),
+    addressNumber: user.addressNumber ? decryptSensitiveData(user.addressNumber) : null,
+    cnpj: user.cnpj ? decryptSensitiveData(user.cnpj) : null,
     city: decryptSensitiveData(user.city),
     state: decryptSensitiveData(user.state),
     email: decryptSensitiveData(user.email),
@@ -88,6 +105,8 @@ export async function exportAccountPdf(userId: string): Promise<Buffer> {
     addField(doc, "E-mail", personal.email);
     addField(doc, "CEP", personal.cep);
     addField(doc, "Endereço", personal.address);
+    if (personal.addressNumber) addField(doc, "Número", personal.addressNumber);
+    if (personal.cnpj) addField(doc, "CNPJ", personal.cnpj);
     addField(doc, "Cidade/UF", `${personal.city}/${personal.state}`);
     addField(doc, "Foto de perfil", personal.profilePhoto);
     addField(doc, "Perfil", user.role);

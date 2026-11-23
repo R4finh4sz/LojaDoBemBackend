@@ -49,6 +49,13 @@ model User {
   password                   String
   role                       Role                     @default(USER)
   active                     Boolean                  @default(true)
+  pendingActivation          Boolean                  @default(false)
+  deletedAt                  DateTime?
+  cnpj                       String?
+  addressNumber              String?
+  authorizationPdf           String?
+  preRegisteredById          String?
+  activation                 ResidentActivation?
   createdAt                  DateTime                 @default(now())
   updatedAt                  DateTime                 @updatedAt
   termAccepts                TermAccept[]
@@ -84,6 +91,38 @@ model Product {
   @@index([city, state, active])
   @@index([adminId])
   @@map("products")
+}
+
+model ResidentActivation {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  attempts  Int      @default(0)
+  tokenHash String?
+  expiresAt DateTime
+
+  @@map("resident_activations")
+}
+
+model StoreAudit {
+  id             String   @id @default(uuid())
+  operation      String
+  actorId        String?
+  userId         String
+  amount         Decimal  @db.Decimal(12, 2)
+  balanceBefore  Decimal  @db.Decimal(12, 2)
+  balanceAfter   Decimal  @db.Decimal(12, 2)
+  redemptionId   String?
+  productId      String?
+  quantity       Int?
+  requestKey     String?
+  requestHash    String?
+  createdAt      DateTime @default(now())
+
+  @@unique([actorId, operation, requestKey])
+  @@index([userId, createdAt])
+  @@map("store_audit")
 }
 
 model Redemption {

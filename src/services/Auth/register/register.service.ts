@@ -11,6 +11,16 @@ function normalizeText(value: string) {
   return value.trim().toLowerCase();
 }
 
+export async function ensureAvailableIdentity(cpf: string, email: string, cpfHash: string, emailHash: string) {
+  const existing = await prisma.user.findFirst({
+    where: {
+      OR: [{ cpfHash }, { emailHash }, { cpfHash: null, cpf }, { emailHash: null, email: { equals: email, mode: "insensitive" } }],
+    },
+    select: { id: true },
+  });
+  if (existing) throw new UserAlreadyExistsError("CPF ou e-mail já cadastrado");
+}
+
 export async function createUserWithRole(
   {
     name,
@@ -26,31 +36,15 @@ export async function createUserWithRole(
     email,
     password,
   }: RegisterInput,
-  role: Role
+  role: Role,
+  cnpj?: string
 ): Promise<RegisterResult> {
   const normalizedEmail = normalizeText(email);
   const normalizedCpf = cpf.replace(/\D/g, "");
   const emailHash = createSearchHash(normalizedEmail);
   const cpfHash = createSearchHash(normalizedCpf);
 
-  const existingUser = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { emailHash },
-        { cpfHash },
-      ],
-    },
-    select: { emailHash: true, cpfHash: true },
-  });
-
-  if (existingUser) {
-    const message =
-      existingUser.emailHash === emailHash
-        ? "E-mail já cadastrado"
-        : "CPF já cadastrado";
-
-    throw new UserAlreadyExistsError(message);
-  }
+  await ensureAvailableIdentity(normalizedCpf, normalizedEmail, cpfHash, emailHash);
 
   const hashedPassword = await hashPassword(password);
 
@@ -72,6 +66,7 @@ export async function createUserWithRole(
         emailHash,
         password: hashedPassword,
         role,
+        cnpj: cnpj ? encryptSensitiveData(cnpj) : undefined,
       },
       select: {
         id: true,
