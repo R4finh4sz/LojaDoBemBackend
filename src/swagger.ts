@@ -618,6 +618,7 @@ export const swaggerSpec = swaggerJSDoc({
         delete: {
           tags: ["Conta e LGPD"],
           summary: "Exclui a conta após confirmar a senha",
+          description: "A exclusão do único MASTER encerra a API após a resposta. A inicialização fica bloqueada até a restauração dessa conta.",
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,

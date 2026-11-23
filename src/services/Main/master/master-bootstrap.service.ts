@@ -18,7 +18,6 @@ const credentialsSchema = z.object({
 });
 
 export async function ensureConfiguredMaster() {
-  if (!masterConfig.email && !masterConfig.password) return;
   const parsed = credentialsSchema.safeParse(masterConfig);
   if (!parsed.success) {
     throw new MasterBootstrapError("Configure MASTER_EMAIL válido e MASTER_PASSWORD com pelo menos 12 caracteres e até 72 bytes");
@@ -29,6 +28,12 @@ export async function ensureConfiguredMaster() {
   for (let attempt = 0; ; attempt++) {
     try {
       await prisma.$transaction(async (tx) => {
+        const identity = await tx.masterIdentity.findUnique({ where: { id: 1 } });
+        if (identity && !(await tx.user.findFirst({
+          where: { id: identity.userId, role: Role.MASTER, active: true, deletedAt: null },
+          select: { id: true },
+        }))) throw new MasterBootstrapError("A conta MASTER original não está ativa. A API não pode iniciar");
+
         const account = await tx.user.findFirst({
           where: { deletedAt: null, OR: [{ emailHash }, { emailHash: null, email: { equals: email, mode: "insensitive" } }] },
         });
@@ -63,4 +68,11 @@ export async function ensureConfiguredMaster() {
       if (!(error instanceof Prisma.PrismaClientKnownRequestError) || !["P2002", "P2034"].includes(error.code) || attempt === 3) throw error;
     }
   }
+}
+
+export async function hasActiveMaster() {
+  const identity = await prisma.masterIdentity.findUnique({ where: { id: 1 } });
+  return identity !== null && (await prisma.user.count({
+    where: { id: identity.userId, role: Role.MASTER, active: true, deletedAt: null },
+  })) === 1;
 }

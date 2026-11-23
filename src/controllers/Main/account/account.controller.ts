@@ -3,6 +3,7 @@ import { AccountError, deleteAccount, exportAccountPdf } from "@/services/Main/a
 import { StoreError } from "@/services/Main/store/exceptions/StoreError";
 import { z } from "zod";
 import { listSessionHistory } from "@/services/Auth/session/session.service";
+import { Role } from "@prisma/client";
 
 function handleError(res: Response, error: unknown) {
   if (error instanceof AccountError || error instanceof StoreError) return res.status(error.status).json({ message: error.message });
@@ -31,7 +32,8 @@ export async function listSessionHistoryController(req: Request, res: Response) 
 
 export async function deleteAccountController(req: Request, res: Response) {
   try {
-    await deleteAccount(req.user!.id, req.body.password);
+    const role = await deleteAccount(req.user!.id, req.body.password);
+    if (role === Role.MASTER) res.once("finish", () => req.app.emit("masterDeleted"));
     return res.status(204).send();
   } catch (error) {
     return handleError(res, error);

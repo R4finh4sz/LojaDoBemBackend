@@ -19,9 +19,11 @@ yarn dev
 
 ## Conta MASTER
 
-Para criar a conta `MASTER` na primeira inicialização, preencha `MASTER_EMAIL` e `MASTER_PASSWORD` no `.env`. Se já houver um `MASTER`, informe o e-mail dessa conta. Deixe os dois campos vazios para iniciar sem provisionamento automático. Use uma senha com pelo menos 12 caracteres e até 72 bytes em UTF-8.
+Preencha `MASTER_EMAIL` e `MASTER_PASSWORD` no `.env` antes de iniciar. Em um banco novo, a API cria o único `MASTER`. Se já houver um `MASTER`, informe o e-mail dessa conta. Use uma senha com pelo menos 12 caracteres e até 72 bytes em UTF-8.
 
-Para trocar a senha desse `MASTER`, altere `MASTER_PASSWORD` e reinicie a API. A troca revoga as sessões e os desafios 2FA anteriores. O login continua exigindo 2FA por e-mail. Se a conta for excluída com as variáveis ainda preenchidas, ela será criada novamente na próxima inicialização.
+Para trocar a senha desse `MASTER`, altere `MASTER_PASSWORD` e reinicie a API. A troca revoga as sessões e os desafios 2FA anteriores. O login continua exigindo 2FA por e-mail.
+
+Excluir o `MASTER` encerra a API após a resposta de exclusão. O banco preserva a identidade da conta e o servidor recusa novas inicializações até ela ser restaurada. A API também verifica a cada cinco segundos se a conta continua ativa.
 
 ## Swagger
 

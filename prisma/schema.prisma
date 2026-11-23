@@ -19,6 +19,13 @@ enum SecurityEventKind {
   TWO_FACTOR_BLOCK
 }
 
+model MasterIdentity {
+  id     Int    @id
+  userId String
+
+  @@map("master_identity")
+}
+
 model SecurityEvent {
   id          String            @id @default(uuid())
   kind        SecurityEventKind
