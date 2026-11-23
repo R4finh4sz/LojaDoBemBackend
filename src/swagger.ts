@@ -320,27 +320,20 @@ export const swaggerSpec = swaggerJSDoc({
           },
         },
         LoginResponse: {
-          type: "object",
-          properties: {
-            twoFactorRequired: {
-              type: "boolean",
-              enum: [true],
-              example: true,
+          oneOf: [{
+            type: "object",
+            required: ["twoFactorRequired", "challengeId", "expiresAt", "message"],
+            properties: {
+              twoFactorRequired: { type: "boolean", enum: [true] },
+              challengeId: { type: "string", format: "uuid" },
+              expiresAt: { type: "string", format: "date-time" },
+              message: { type: "string", example: "Código 2FA enviado para o e-mail cadastrado" },
             },
-            challengeId: {
-              type: "string",
-              format: "uuid",
-            },
-            expiresAt: {
-              type: "string",
-              format: "date-time",
-              description: "Valido por ate 15 minutos",
-            },
-            message: {
-              type: "string",
-              example: "Código 2FA enviado para o e-mail cadastrado",
-            },
-          },
+          }, {
+            type: "object",
+            required: ["twoFactorRequired", "token"],
+            properties: { twoFactorRequired: { type: "boolean", enum: [false] }, token: { type: "string" } },
+          }],
         },
         AuthResponse: {
           type: "object",
@@ -553,6 +546,22 @@ export const swaggerSpec = swaggerJSDoc({
       },
     },
     paths: {
+      "/account/two-factor": {
+        patch: {
+          tags: ["Conta"],
+          summary: "Ativa ou desativa o 2FA com a senha atual",
+          security: [{ bearerAuth: [] }],
+          requestBody: jsonBody({ enabled: { type: "boolean" }, password: { type: "string", format: "password" } }),
+          responses: {
+            200: { description: "Preferência salva", content: { "application/json": { schema: {
+              type: "object", properties: { twoFactorEnabled: { type: "boolean" } },
+            } } } },
+            400: { description: "Dados inválidos" },
+            401: { description: "Sessão inválida" },
+            403: { description: "Senha atual inválida" },
+          },
+        },
+      },
       "/account/sessions": {
         get: {
           tags: ["Conta e LGPD"],
@@ -790,7 +799,7 @@ export const swaggerSpec = swaggerJSDoc({
           },
           responses: {
             200: {
-              description: "Credenciais validas e codigo 2FA enviado por e-mail",
+              description: "Credenciais válidas. Retorna o token ou o desafio 2FA, conforme a preferência da conta.",
               content: {
                 "application/json": {
                   schema: {
@@ -1158,7 +1167,7 @@ export const swaggerSpec = swaggerJSDoc({
           tags: ["EcoCoin"], summary: "Cooperativa credita EcoCoins a um munícipe da mesma cidade", security: [{ bearerAuth: [] }],
           parameters: [{ name: "Idempotency-Key", in: "header", required: true, schema: { type: "string", maxLength: 128 } }],
           requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/MunicipalCreditInput" } } } },
-          responses: { 201: { description: "Crédito registrado" }, 400: { description: "Dados inválidos" }, 403: { description: "Perfil sem acesso" }, 404: { description: "Munícipe não encontrado" }, 409: { description: "Conflito de saldo, concorrência ou chave" } },
+          responses: { 201: { description: "Crédito registrado com protocolo, nome completo do munícipe e saldo atualizado" }, 400: { description: "Dados inválidos" }, 403: { description: "Perfil sem acesso" }, 404: { description: "Munícipe não encontrado" }, 409: { description: "Conflito de saldo, concorrência ou chave" } },
         },
       },
       "/auth/logout": {
@@ -1190,13 +1199,14 @@ export const swaggerSpec = swaggerJSDoc({
       },
       "/residents/pre-registrations": {
         post: { ...residents, summary: "Pré-cadastra munícipe do mesmo município",
-          description: "Disponível para COOPERATIVA e PrefeituraVendedor.",
+          description: "Disponível apenas para PrefeituraVendedor.",
           requestBody: jsonBody({
             cpf, name: { type: "string" }, birthDate: { type: "string", format: "date", description: "Idade de 18 a 90 anos, inclusive." },
             cep: { type: "string" }, address: { type: "string" }, addressNumber: { type: "string" },
             email: { type: "string", format: "email" },
-            authorizationPdf: { type: "string", format: "byte", description: "PDF opcional de até 2 MiB" },
-          }, ["cpf", "name", "birthDate", "cep", "address", "addressNumber", "email"]),
+            termsAccepted: { type: "boolean", enum: [true] },
+            authorizationDocument: { type: "string", format: "byte", description: "Um termo assinado em JPG, PNG ou PDF de até 2 MiB" },
+          }, ["cpf", "name", "birthDate", "cep", "address", "addressNumber", "email", "termsAccepted", "authorizationDocument"]),
           responses: { 201: { description: "Pré-cadastro criado" }, 400: { description: "Dados inválidos" }, 403: { description: "Perfil ou município sem acesso" }, 409: { description: "CPF ou e-mail em uso" } },
         },
       },
@@ -1289,7 +1299,8 @@ export const swaggerSpec = swaggerJSDoc({
       },
       "/store/admin/carts/{id}/checkout": {
         post: { ...seller, summary: "Conclui a venda do carrinho", parameters: [pathId()],
-          responses: { 201: { description: "Recibo da venda. Repetir o mesmo ID devolve o recibo existente." }, 404: { description: "Carrinho não encontrado ou expirado" }, 409: { description: "Carrinho vazio, saldo ou estoque insuficiente" } },
+          requestBody: jsonBody({ expectedTotal: { type: "string", example: "25.00" } }),
+          responses: { 201: { description: "Recibo da venda. Repetir o mesmo ID devolve o recibo existente." }, 400: { description: "Total confirmado inválido ou ausente" }, 404: { description: "Carrinho não encontrado ou expirado" }, 409: { description: "Carrinho vazio, saldo ou estoque insuficiente" }, 412: { description: "O total mudou. Atualize o carrinho e confirme o novo valor." } },
         },
       },
       "/store/admin/redemptions": {

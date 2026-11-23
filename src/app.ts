@@ -15,6 +15,7 @@ export const app = express();
 app.use(cors());
 app.use(rateLimitMiddleware);
 app.post("/residents/pre-registrations", express.json({ limit: "3mb" }));
+app.patch("/account/profile", express.json({ limit: "1mb" }));
 app.use(express.json());
 
 app.use("/docs", docsRoutes);

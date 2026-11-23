@@ -1,9 +1,12 @@
 import { Request, Response } from "express";
-import { AccountError, deleteAccount, exportAccountPdf } from "@/services/Main/account/account.service";
+import { AccountError, deleteAccount, exportAccountJson, exportAccountPdf } from "@/services/Main/account/account.service";
 import { StoreError } from "@/services/Main/store/exceptions/StoreError";
 import { z } from "zod";
 import { listSessionHistory } from "@/services/Auth/session/session.service";
 import { Role } from "@prisma/client";
+import { getAccountProfile, updateAccountProfile, updateAccountTwoFactor } from "@/services/Main/account/profile.service";
+import { profileUpdateSchema } from "@/validation/profile-update.validation";
+import { loginSchema } from "@/validation/login.validation";
 
 function handleError(res: Response, error: unknown) {
   if (error instanceof AccountError || error instanceof StoreError) return res.status(error.status).json({ message: error.message });
@@ -40,14 +43,46 @@ export async function deleteAccountController(req: Request, res: Response) {
   }
 }
 
+export async function getAccountProfileController(req: Request, res: Response) {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    return res.json(await getAccountProfile(req.user!.id));
+  } catch (error) { return handleError(res, error); }
+}
+
+export async function updateAccountProfileController(req: Request, res: Response) {
+  res.setHeader("Cache-Control", "no-store");
+  const parsed = profileUpdateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: "Dados do perfil inválidos", errors: parsed.error.flatten().fieldErrors });
+  try {
+    return res.json(await updateAccountProfile(req.user!.id, parsed.data));
+  } catch (error) { return handleError(res, error); }
+}
+
+const twoFactorSettings = z.object({ enabled: z.boolean(), password: loginSchema.shape.password }).strict();
+
+export async function updateAccountTwoFactorController(req: Request, res: Response) {
+  res.setHeader("Cache-Control", "no-store");
+  const parsed = twoFactorSettings.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: "Informe o estado do 2FA e a senha atual" });
+  try {
+    return res.json(await updateAccountTwoFactor(req.user!.id, parsed.data));
+  } catch (error) { return handleError(res, error); }
+}
+
 export async function exportAccountController(req: Request, res: Response) {
   try {
-    const pdf = await exportAccountPdf(req.user!.id);
     const date = new Date().toISOString().slice(0, 10);
+    res.setHeader("Cache-Control", "no-store");
+    if (req.query.format === "json") {
+      const data = await exportAccountJson(req.user!.id);
+      res.attachment("meus-dados-" + date + ".json");
+      return res.json(data);
+    }
+    const pdf = await exportAccountPdf(req.user!.id);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="meus-dados-${date}.pdf"`);
     res.setHeader("Content-Length", pdf.length.toString());
-    res.setHeader("Cache-Control", "no-store");
     return res.status(200).send(pdf);
   } catch (error) {
     return handleError(res, error);

@@ -6,6 +6,7 @@ import { CreateProductDto, RedeemProductDto, ValidatePickupDto } from "@/dto/sto
 import { authMiddleware, requireRole } from "@/middlewares/auth.middleware";
 import { validateDto } from "@/middlewares/validate-dto.middleware";
 import { barcodePattern } from "@/dto/store/barcode-pattern";
+import { moneyPattern } from "@/dto/store/money-pattern";
 import { checkoutCart, createCart, deleteCart, getCart, listCarts, setCartItem } from "@/services/Main/store/sales-cart.service";
 import { exportMunicipalStore } from "@/services/Main/store/store-export.service";
 import { updateMunicipalStock } from "@/services/Main/store/store.service";
@@ -48,14 +49,22 @@ router.put("/admin/carts/:id/items", seller, (req, res) => respond(res, () => {
   const { quantity, ...identifier } = cartItemInput.parse(req.body);
   return setCartItem(req.user!.id, uuid.parse(req.params.id), identifier, quantity);
 }));
-router.post("/admin/carts/:id/checkout", seller, (req, res) => respond(res, () => checkoutCart(req.user!.id, uuid.parse(req.params.id)), 201));
+router.post("/admin/carts/:id/checkout", seller, (req, res) => respond(res, () => {
+  const { expectedTotal } = z.object({ expectedTotal: z.string().regex(/^\d{1,24}\.\d{2}$/) }).strict().parse(req.body);
+  return checkoutCart(req.user!.id, uuid.parse(req.params.id), expectedTotal);
+}, 201));
 
 router.post("/admin/products", seller, validateDto(CreateProductDto), createProductController);
 router.get("/admin/products", seller, listAdminProductsController);
 router.patch("/admin/products/:id/stock", seller, (req, res) => respond(res, async () => {
   const count = z.number().int().min(0).max(2_147_483_647);
-  const { quantity, expectedQuantity } = z.object({ quantity: count, expectedQuantity: count }).strict().parse(req.body);
-  return { product: await updateMunicipalStock(req.user!.id, uuid.parse(req.params.id), quantity, expectedQuantity) };
+  const priceValue = z.string().trim().regex(moneyPattern, "Informe um valor com até duas casas decimais").transform((value) => value.replace(",", "."));
+  const input = z.object({ quantity: count, expectedQuantity: count, price: priceValue.optional(), expectedPrice: priceValue.optional() })
+    .strict().refine(({ price, expectedPrice }) => (price === undefined) === (expectedPrice === undefined), {
+      message: "Informe o preço atual e o novo preço juntos",
+      path: ["price"],
+    }).parse(req.body);
+  return { product: await updateMunicipalStock(req.user!.id, uuid.parse(req.params.id), input) };
 }));
 router.get("/admin/redemptions", requireRole(Role.PrefeituraVendedor), adminRedemptionsController);
 router.post("/admin/redemptions/validate", requireRole(Role.PrefeituraVendedor), validateDto(ValidatePickupDto), validatePickupController);

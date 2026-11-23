@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { authConfig } from "@/config/env";
 import type { SessionMetadata } from "./session-metadata";
+import type { Role } from "@prisma/client";
+import jwt from "jsonwebtoken";
+import { roleLevel } from "@/config/roles";
+import type { AuthResult, AuthTokenPayload } from "@/types/auth.types";
 
 export function getSessionExpiresAt() {
   const expiresAt = new Date();
@@ -9,14 +13,21 @@ export function getSessionExpiresAt() {
   return expiresAt;
 }
 
-export async function createSession(userId: string, metadata?: SessionMetadata) {
-  return prisma.session.create({
+export async function issueSessionToken(user: { id: string; role: Role }, metadata?: SessionMetadata): Promise<AuthResult> {
+  const session = await prisma.session.create({
     data: {
-      userId,
+      userId: user.id,
       ...metadata,
       expiresAt: getSessionExpiresAt(),
     },
   });
+  const payload: AuthTokenPayload = {
+    sub: user.id,
+    sid: session.id,
+    role: user.role,
+    level: roleLevel(user.role),
+  };
+  return { token: jwt.sign(payload, authConfig.jwtSecret, { expiresIn: authConfig.jwtExpiresIn } as jwt.SignOptions) };
 }
 
 export async function listSessionHistory(userId: string, sessionId: string, page: number, limit: number) {
