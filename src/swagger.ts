@@ -450,6 +450,7 @@ export const swaggerSpec = swaggerJSDoc({
             name: { type: "string", example: "Garrafa reutilizável" },
             description: { type: "string" },
             photo: { type: "string", example: "https://exemplo.com/produto.jpg" },
+            barcode: { type: "string", nullable: true, example: "0012345678905" },
             price: { type: "string", format: "decimal", example: "25.00", description: "Valor em EcoCoin" },
             quantity: { type: "integer", minimum: 0 },
             city: { type: "string", example: "Salesópolis" },
@@ -466,6 +467,7 @@ export const swaggerSpec = swaggerJSDoc({
             name: { type: "string", maxLength: 120 },
             description: { type: "string", maxLength: 2000 },
             photo: { type: "string", maxLength: 2048 },
+            barcode: { type: "string", maxLength: 64, example: "0012345678905" },
             price: { oneOf: [{ type: "string", example: "25.00" }, { type: "number", example: 25 }] },
             quantity: { type: "integer", minimum: 0 },
           },
@@ -1051,13 +1053,14 @@ export const swaggerSpec = swaggerJSDoc({
       },
       "/store/admin/products": {
         post: {
-          tags: ["Administração da Loja"], summary: "Cria um produto na cidade do administrador", security: [{ bearerAuth: [] }],
+          tags: ["Administração da Loja"], summary: "Cria um produto no estoque do município do vendedor", security: [{ bearerAuth: [] }],
           requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/CreateStoreProductInput" } } } },
-          responses: { 201: { description: "Produto criado", content: { "application/json": { schema: { type: "object", properties: { product: { $ref: "#/components/schemas/StoreProduct" } } } } } }, 400: { description: "Dados inválidos" }, 401: { description: "Não autenticado" }, 403: { description: "Disponível somente para ADMIN" } },
+          responses: { 201: { description: "Produto criado", content: { "application/json": { schema: { type: "object", properties: { product: { $ref: "#/components/schemas/StoreProduct" } } } } } }, 400: { description: "Dados inválidos" }, 401: { description: "Não autenticado" }, 403: { description: "Disponível para PrefeituraVendedor" }, 409: { description: "Código de barras duplicado no município" } },
         },
         get: {
-          tags: ["Administração da Loja"], summary: "Lista os produtos do administrador", security: [{ bearerAuth: [] }],
-          responses: { 200: { description: "Produtos administrados", content: { "application/json": { schema: { type: "object", properties: { products: { type: "array", items: { $ref: "#/components/schemas/StoreProduct" } } } } } } }, 401: { description: "Não autenticado" }, 403: { description: "Disponível somente para ADMIN" } },
+          tags: ["Administração da Loja"], summary: "Lista ou busca por código de barras no estoque do município", security: [{ bearerAuth: [] }],
+          parameters: [{ in: "query", name: "barcode", schema: { type: "string", maxLength: 64 } }],
+          responses: { 200: { description: "Produtos do município", content: { "application/json": { schema: { type: "object", properties: { products: { type: "array", items: { $ref: "#/components/schemas/StoreProduct" } } } } } } }, 401: { description: "Não autenticado" }, 403: { description: "Disponível para PrefeituraVendedor" } },
         },
       },
       "/auth/register/cooperative": {

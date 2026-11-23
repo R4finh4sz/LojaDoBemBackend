@@ -1,8 +1,8 @@
 import { randomBytes } from "crypto";
-import { Prisma, RedemptionStatus } from "@prisma/client";
+import { Prisma, RedemptionStatus, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createSearchHash, decryptSensitiveData } from "@/services/Auth/data-protection/data-protection.service";
-import { decryptedLocation, sameLocation } from "@/services/Main/residents/municipality";
+import { decryptedLocation, municipalProducts, sameLocation } from "@/services/Main/residents/municipality";
 import { StoreError } from "./exceptions/StoreError";
 import { InsufficientBalanceError } from "./exceptions/InsufficientBalanceError";
 import { InsufficientStockError } from "./exceptions/InsufficientStockError";
@@ -11,12 +11,12 @@ import { auditedOperation, previousAudit } from "./store-audit.service";
 export { StoreError } from "./exceptions/StoreError";
 
 const REDEMPTION_DAYS = 5;
-const productPublicSelect = {
-  id: true, name: true, description: true, photo: true, price: true,
+export const productPublicSelect = {
+  id: true, name: true, description: true, photo: true, barcode: true, price: true,
   quantity: true, city: true, state: true, active: true, createdAt: true, updatedAt: true,
 } satisfies Prisma.ProductSelect;
 const redemptionPublicSelect = {
-  id: true, quantity: true, unitPrice: true, totalPrice: true, pickupCode: true,
+  id: true, cartId: true, quantity: true, unitPrice: true, totalPrice: true, pickupCode: true,
   status: true, expiresAt: true, completedAt: true, createdAt: true, updatedAt: true,
 } satisfies Prisma.RedemptionSelect;
 
@@ -25,13 +25,28 @@ function decryptPickupUser<T extends { user?: { name: string } }>(value: T): T {
   return value;
 }
 
-export async function createProduct(adminId: string, input: { name: string; description: string; photo: string; price: string; quantity: number }) {
-  return auditedOperation(async (tx) => {
-    const admin = await tx.user.findUnique({ where: { id: adminId, active: true }, select: { city: true, state: true } });
-    if (!admin) throw new StoreError("Administrador não encontrado", 404);
-    const location = decryptedLocation(admin);
-    return tx.product.create({ data: { ...input, adminId, city: location.city, state: location.state }, select: productPublicSelect });
+export async function sellerMunicipality(sellerId: string, tx: Prisma.TransactionClient = prisma) {
+  const seller = await tx.user.findUnique({
+    where: { id: sellerId, role: Role.PrefeituraVendedor, active: true },
+    select: { city: true, state: true },
   });
+  if (!seller) throw new StoreError("Vendedor não encontrado", 404);
+  const location = decryptedLocation(seller);
+  return { city: location.city.trim().normalize("NFC").toLowerCase(), state: location.state.trim().toLowerCase() };
+}
+
+export async function createProduct(adminId: string, input: { name: string; description: string; photo: string; price: string; quantity: number; barcode?: string }) {
+  try {
+    return await auditedOperation(async (tx) => {
+      const location = await sellerMunicipality(adminId, tx);
+      return tx.product.create({ data: { ...input, adminId, ...location }, select: productPublicSelect });
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new StoreError("Código de barras já cadastrado neste município", 409);
+    }
+    throw error;
+  }
 }
 
 export async function listProductsForUser(userId: string) {
@@ -39,14 +54,33 @@ export async function listProductsForUser(userId: string) {
   if (!user) throw new StoreError("Usuário não encontrado", 404);
   const location = decryptedLocation(user);
   return prisma.product.findMany({
-    where: { city: { equals: location.city, mode: "insensitive" }, state: { equals: location.state, mode: "insensitive" }, active: true, admin: { active: true }, quantity: { gt: 0 } },
+    where: { ...municipalProducts(location), active: true, quantity: { gt: 0 } },
     orderBy: { createdAt: "desc" },
     select: productPublicSelect,
   });
 }
 
-export async function listAdminProducts(adminId: string) {
-  return prisma.product.findMany({ where: { adminId }, orderBy: { createdAt: "desc" }, select: productPublicSelect });
+export async function listAdminProducts(adminId: string, barcode?: string) {
+  const location = await sellerMunicipality(adminId);
+  return prisma.product.findMany({
+    where: { ...municipalProducts(location), barcode },
+    orderBy: { createdAt: "desc" },
+    select: productPublicSelect,
+  });
+}
+
+export function updateMunicipalStock(sellerId: string, productId: string, quantity: number, expectedQuantity: number) {
+  return auditedOperation(async (tx) => {
+    const location = await sellerMunicipality(sellerId, tx);
+    const scope = { id: productId, ...municipalProducts(location), active: true };
+    const updated = await tx.product.updateMany({
+      where: { ...scope, quantity: expectedQuantity }, data: { quantity },
+    });
+    const product = await tx.product.findFirst({ where: scope, select: productPublicSelect });
+    if (!product) throw new StoreError("Produto não encontrado neste município", 404);
+    if (!updated.count) throw new StoreError("O estoque foi alterado. Consulte a quantidade atual", 409);
+    return product;
+  });
 }
 
 export async function getEcoCoinBalance(userId: string) {
@@ -65,7 +99,7 @@ export async function redeemProduct(userId: string, productId: string, quantity:
     }
     const [user, product] = await Promise.all([
       tx.user.findUnique({ where: { id: userId, active: true, deletedAt: null }, select: { city: true, state: true, ecoCoinBalance: true } }),
-      tx.product.findUnique({ where: { id: productId, admin: { active: true } } }),
+      tx.product.findUnique({ where: { id: productId } }),
     ]);
     if (!user || !product || !product.active) throw new StoreError("Produto não encontrado", 404);
     if (!sameLocation(decryptedLocation(user), product)) throw new StoreError("Produto indisponível para a sua cidade", 403);
@@ -126,8 +160,9 @@ export async function listUserRedemptions(userId: string) {
 
 export async function listAdminRedemptions(adminId: string) {
   await expirePendingRedemptions();
+  const location = await sellerMunicipality(adminId);
   const redemptions = await prisma.redemption.findMany({
-    where: { product: { adminId } },
+    where: { product: municipalProducts(location) },
     select: { ...redemptionPublicSelect, product: { select: productPublicSelect }, user: { select: { name: true } } },
     orderBy: { createdAt: "desc" },
   });
@@ -137,12 +172,13 @@ export async function listAdminRedemptions(adminId: string) {
 export async function validatePickupCode(adminId: string, code: string) {
   await expirePendingRedemptions();
   return auditedOperation(async (tx) => {
+    const location = await sellerMunicipality(adminId, tx);
     const redemption = await tx.redemption.findUnique({
-      where: { pickupCode: code, product: { admin: { active: true } }, user: { active: true } },
+      where: { pickupCode: code, user: { active: true } },
       include: { product: true },
     });
     if (!redemption || redemption.status !== RedemptionStatus.PENDING) throw new StoreError("Código inválido ou já utilizado", 404);
-    if (redemption.product.adminId !== adminId) throw new StoreError("Código não pertence a esta loja", 403);
+    if (!sameLocation(redemption.product, location)) throw new StoreError("Código não pertence a este município", 403);
     if (redemption.expiresAt <= new Date()) throw new StoreError("Código expirado", 410);
     const result = await tx.redemption.updateMany({ where: { id: redemption.id, status: RedemptionStatus.PENDING, pickupCode: code }, data: { status: RedemptionStatus.COMPLETED, pickupCode: null, completedAt: new Date(), validatedById: adminId } });
     if (!result.count) throw new StoreError("Código inválido ou já utilizado", 409);

@@ -30,6 +30,7 @@ export const brevoConfig = {
 export const securityConfig = {
   rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
   rateLimitMaxAttempts: Number(process.env.RATE_LIMIT_MAX_ATTEMPTS || 6),
+  storeRateLimitMaxAttempts: Number(process.env.STORE_RATE_LIMIT_MAX_ATTEMPTS || 300),
   bruteForceBlockMs: Number(process.env.BRUTE_FORCE_BLOCK_MS || 15 * 60 * 1000),
   bruteForceDelayMs: Number(process.env.BRUTE_FORCE_DELAY_MS || 500),
   twoFactorCodeExpiresMinutes: Number(process.env.TWO_FACTOR_CODE_EXPIRES_MINUTES || 15),
