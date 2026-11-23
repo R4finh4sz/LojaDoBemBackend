@@ -470,12 +470,12 @@ export const swaggerSpec = swaggerJSDoc({
             quantity: { type: "integer", minimum: 0 },
           },
         },
-        GrantEcoCoinInput: {
+        MunicipalCreditInput: {
           type: "object",
-          required: ["userId", "amount"],
+          required: ["cpf", "amount"],
           properties: {
-            userId: { type: "string", format: "uuid" },
-            amount: { oneOf: [{ type: "string", example: "50.00" }, { type: "number", example: 50 }] },
+            cpf: { type: "string" },
+            amount: { type: "string", example: "50.00" },
           },
         },
         RedeemProductInput: {
@@ -636,7 +636,10 @@ export const swaggerSpec = swaggerJSDoc({
             content: {
               "application/json": {
                 schema: {
-                  $ref: "#/components/schemas/RegisterInput",
+                  allOf: [
+                    { $ref: "#/components/schemas/RegisterInput" },
+                    { type: "object", required: ["cnpj"], properties: { cnpj: { type: "string" } } },
+                  ],
                 },
               },
             },
@@ -1057,11 +1060,19 @@ export const swaggerSpec = swaggerJSDoc({
           responses: { 200: { description: "Produtos administrados", content: { "application/json": { schema: { type: "object", properties: { products: { type: "array", items: { $ref: "#/components/schemas/StoreProduct" } } } } } } }, 401: { description: "Não autenticado" }, 403: { description: "Disponível somente para ADMIN" } },
         },
       },
-      "/store/admin/ecocoins": {
+      "/auth/register/cooperative": {
         post: {
-          tags: ["EcoCoin"], summary: "Credita EcoCoins a usuário da mesma cidade", security: [{ bearerAuth: [] }],
-          requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/GrantEcoCoinInput" } } } },
-          responses: { 201: { description: "Crédito realizado", content: { "application/json": { schema: { type: "object", properties: { user: { type: "object", properties: { id: { type: "string", format: "uuid" }, ecoCoinBalance: { type: "string" } } } } } } } }, 400: { description: "Valor ou usuário inválido" }, 401: { description: "Não autenticado" }, 403: { description: "Usuário de outra cidade ou perfil sem acesso" }, 404: { description: "Usuário não encontrado" } },
+          tags: ["Auth"], summary: "MASTER cadastra uma cooperativa vinculada ao município do CEP", security: [{ bearerAuth: [] }],
+          requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/RegisterInput" } } } },
+          responses: { 201: { description: "Cooperativa cadastrada" }, 400: { description: "Dados inválidos" }, 403: { description: "Perfil sem acesso" }, 409: { description: "Cadastro duplicado" } },
+        },
+      },
+      "/residents/credits": {
+        post: {
+          tags: ["EcoCoin"], summary: "Cooperativa credita EcoCoins a um munícipe da mesma cidade", security: [{ bearerAuth: [] }],
+          parameters: [{ name: "Idempotency-Key", in: "header", required: true, schema: { type: "string", maxLength: 128 } }],
+          requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/MunicipalCreditInput" } } } },
+          responses: { 201: { description: "Crédito registrado" }, 400: { description: "Dados inválidos" }, 403: { description: "Perfil sem acesso" }, 404: { description: "Munícipe não encontrado" }, 409: { description: "Conflito de saldo, concorrência ou chave" } },
         },
       },
       "/store/admin/redemptions": {
