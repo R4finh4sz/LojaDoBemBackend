@@ -89,16 +89,20 @@ export async function listAdminProducts(adminId: string, filters: {
   return { products, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 }
 
-export function updateMunicipalStock(sellerId: string, productId: string, quantity: number, expectedQuantity: number) {
+type StockUpdate = { quantity: number; expectedQuantity: number; price?: string; expectedPrice?: string };
+
+export function updateMunicipalStock(sellerId: string, productId: string, { quantity, expectedQuantity, price, expectedPrice }: StockUpdate) {
   return auditedOperation(async (tx) => {
     const location = await sellerMunicipality(sellerId, tx);
     const scope = { id: productId, ...municipalProducts(location), active: true };
     const updated = await tx.product.updateMany({
-      where: { ...scope, quantity: expectedQuantity }, data: { quantity },
+      where: { ...scope, quantity: expectedQuantity, price: expectedPrice }, data: { quantity, price },
     });
     const product = await tx.product.findFirst({ where: scope, select: productPublicSelect });
     if (!product) throw new StoreError("Produto não encontrado neste município", 404);
-    if (!updated.count) throw new StoreError("O estoque foi alterado. Consulte a quantidade atual", 409);
+    if (!updated.count) throw new StoreError(price === undefined
+      ? "O estoque foi alterado. Consulte a quantidade atual"
+      : "O estoque ou o preço foi alterado. Confira os valores atuais antes de salvar", 409);
     return product;
   });
 }

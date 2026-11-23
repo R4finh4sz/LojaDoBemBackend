@@ -114,7 +114,7 @@ async function saleReceipt(tx: Prisma.TransactionClient, sellerId: string, id: s
   };
 }
 
-export function checkoutCart(sellerId: string, id: string) {
+export function checkoutCart(sellerId: string, id: string, expectedTotal?: string) {
   return auditedOperation(async (tx) => {
     const location = await sellerMunicipality(sellerId, tx);
     const existing = await tx.storeAudit.findMany({ where: { actorId: sellerId, cartId: id }, orderBy: { productId: "asc" } });
@@ -123,6 +123,9 @@ export function checkoutCart(sellerId: string, id: string) {
     if (!cart.items.length) throw new StoreError("Adicione pelo menos um item ao carrinho", 409);
     const buyer = await requireBuyer(tx, cart.buyerId, location);
     const total = cart.items.reduce((sum, item) => sum.add(item.product.price.mul(item.quantity)), new Prisma.Decimal(0));
+    if (expectedTotal !== undefined && !total.eq(expectedTotal)) {
+      throw new StoreError("O total do carrinho mudou. Confira o novo valor antes de confirmar a venda", 412);
+    }
     if (buyer.ecoCoinBalance.lt(total)) throw new InsufficientBalanceError();
     const now = new Date();
     const claimed = await tx.salesCart.deleteMany({ where: { id, sellerId, expiresAt: { gt: now } } });
