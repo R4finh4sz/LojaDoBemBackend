@@ -238,6 +238,7 @@ model EcoCoinTransaction {
 model PasswordResetChallenge {
   id                  String    @id @default(uuid())
   userId              String
+  sessionId           String?
   codeHash            String
   codeSalt            String
   attempts            Int       @default(0)
@@ -254,6 +255,7 @@ model PasswordResetChallenge {
   @@index([userId])
   @@index([expiresAt])
   @@index([blockedUntil])
+  @@index([sessionId])
   @@map("password_reset_challenges")
 }
 
