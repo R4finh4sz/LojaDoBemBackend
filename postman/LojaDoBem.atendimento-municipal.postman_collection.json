@@ -466,7 +466,7 @@
               }
             },
             {
-              "name": "Listar estoque",
+              "name": "Listar estoque paginado",
               "request": {
                 "method": "GET",
                 "auth": {
@@ -480,7 +480,25 @@
                   ]
                 },
                 "header": [],
-                "url": "{{baseUrl}}/store/admin/products"
+                "url": "{{baseUrl}}/store/admin/products?page=1"
+              }
+            },
+            {
+              "name": "Filtrar produtos disponíveis",
+              "request": {
+                "method": "GET",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{sellerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "header": [],
+                "url": "{{baseUrl}}/store/admin/products?page=1&search=garrafa&stock=available"
               }
             },
             {

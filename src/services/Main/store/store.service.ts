@@ -60,13 +60,33 @@ export async function listProductsForUser(userId: string) {
   });
 }
 
-export async function listAdminProducts(adminId: string, barcode?: string) {
+export async function listAdminProducts(adminId: string, filters: {
+  page: number; search?: string; barcode?: string; stock?: "available" | "out";
+}) {
   const location = await sellerMunicipality(adminId);
-  return prisma.product.findMany({
-    where: { ...municipalProducts(location), barcode },
-    orderBy: { createdAt: "desc" },
-    select: productPublicSelect,
-  });
+  const { page, barcode, stock } = filters;
+  const limit = 9;
+  const search = filters.search?.replace(/[\\%_]/g, "\\$&");
+  const match = { contains: search, mode: "insensitive" as const };
+  const where: Prisma.ProductWhereInput = { ...municipalProducts(location), barcode };
+  if (search) where.OR = [{ name: match }, { description: match }];
+  if (stock === "available") {
+    where.active = true;
+    where.quantity = { gt: 0 };
+  }
+  if (stock === "out") where.quantity = 0;
+
+  const [total, products] = await prisma.$transaction([
+    prisma.product.count({ where }),
+    prisma.product.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: (page - 1) * limit,
+      take: limit,
+      select: productPublicSelect,
+    }),
+  ], { isolationLevel: "RepeatableRead" });
+  return { products, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 }
 
 export function updateMunicipalStock(sellerId: string, productId: string, quantity: number, expectedQuantity: number) {

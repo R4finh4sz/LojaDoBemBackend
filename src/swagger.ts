@@ -1121,9 +1121,28 @@ export const swaggerSpec = swaggerJSDoc({
           responses: { 201: { description: "Produto criado", content: { "application/json": { schema: { type: "object", properties: { product: { $ref: "#/components/schemas/StoreProduct" } } } } } }, 400: { description: "Dados inválidos" }, 401: { description: "Não autenticado" }, 403: { description: "Disponível para PrefeituraVendedor" }, 409: { description: "Código de barras duplicado no município" } },
         },
         get: {
-          tags: ["Administração da Loja"], summary: "Lista ou busca por código de barras no estoque do município", security: [{ bearerAuth: [] }],
-          parameters: [{ in: "query", name: "barcode", schema: { type: "string", maxLength: 64 } }],
-          responses: { 200: { description: "Produtos do município", content: { "application/json": { schema: { type: "object", properties: { products: { type: "array", items: { $ref: "#/components/schemas/StoreProduct" } } } } } } }, 401: { description: "Não autenticado" }, 403: { description: "Disponível para PrefeituraVendedor" } },
+          tags: ["Administração da Loja"], summary: "Lista e filtra os produtos do município em páginas de 9 itens", security: [{ bearerAuth: [] }],
+          parameters: [
+            { in: "query", name: "page", schema: { type: "integer", minimum: 1, maximum: 100_000_000, default: 1 } },
+            { in: "query", name: "search", description: "Busca por trecho do nome ou descrição", schema: { type: "string", maxLength: 120 } },
+            { in: "query", name: "barcode", description: "Código de barras exato", schema: barcode },
+            { in: "query", name: "stock", description: "available seleciona itens ativos com estoque e out seleciona itens zerados",
+              schema: { type: "string", enum: ["available", "out"] } },
+          ],
+          responses: {
+            200: { description: "Produtos do município e paginação após os filtros", content: { "application/json": { schema: {
+              type: "object", properties: {
+                products: { type: "array", items: { $ref: "#/components/schemas/StoreProduct" } },
+                pagination: { type: "object", properties: {
+                  page: { type: "integer" }, limit: { type: "integer", example: 9 },
+                  total: { type: "integer" }, totalPages: { type: "integer" },
+                } },
+              },
+            } } } },
+            400: { description: "Filtro ou página inválida" },
+            401: { description: "Não autenticado" },
+            403: { description: "Disponível para PrefeituraVendedor" },
+          },
         },
       },
       "/auth/register/cooperative": {

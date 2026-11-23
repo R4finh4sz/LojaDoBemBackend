@@ -28,6 +28,8 @@ Use `GET /store/admin/dashboard` com `sellerToken` para consultar os indicadores
 
 O catálogo e o estoque são compartilhados por município. No cadastro, informe o preço em EcoCoins e a imagem em `photo`. O campo opcional `barcode` é texto, inclusive para preservar zeros à esquerda. Use o mesmo campo na busca e na inclusão de itens no carrinho. Para ajustar o estoque, informe a quantidade atual em `expectedQuantity` e a quantidade desejada em `quantity`.
 
+Para listar produtos, use `GET /store/admin/products?page=1`. A lista tem 9 itens por página. Combine `search` (trecho do nome ou descrição), `barcode` (código exato) e `stock` (`available` para ativos com estoque ou `out` para estoque zerado). A resposta inclui `products` e `pagination`, com o total de itens e páginas após os filtros. Ao trocar um filtro, volte à página 1.
+
 1. Use a busca de munícipe por CPF na pasta `PrefeituraVendedor` e copie o ID para `userId`.
 2. Crie um carrinho para esse comprador e copie o ID retornado para `cartId`.
 3. Defina a quantidade por item. Use zero para remover o item. O carrinho fica disponível ao vendedor que o abriu por 24 horas a partir da criação, sem reservar estoque.
