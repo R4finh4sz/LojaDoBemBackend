@@ -1211,6 +1211,28 @@ export const swaggerSpec = swaggerJSDoc({
           } } },
         },
       },
+      "/store/admin/dashboard": {
+        get: { ...seller, summary: "Consulta os indicadores do município",
+          responses: {
+            200: {
+              description: "Totais históricos dos pedidos concluídos, até 10 pedidos recentes e até 5 itens mais retirados",
+              content: { "application/json": { example: {
+                municipality: { city: "salesópolis", state: "sp" },
+                ordersCollected: 2, usersServed: 1, pointsRedeemed: "20.00",
+                recentOrders: [{
+                  id: "fb31f074-dc75-4934-a1d9-875ebe2fdb01",
+                  user: { id: "b39b772f-4c82-47f4-8e97-1d13a9702a95", name: "Munícipe de exemplo" },
+                  collectedAt: "2026-11-23T13:32:00.000Z",
+                  items: [{ productId: "e75fc271-1414-47a9-84d5-311017597c69", name: "Ecobag", quantity: 2 }],
+                }],
+                topItems: [{ productId: "e75fc271-1414-47a9-84d5-311017597c69", productName: "Ecobag", units: 3, sharePercent: 75 }],
+              } } },
+            },
+            401: { description: "Sessão inválida" },
+            403: { description: "Rota exclusiva de PrefeituraVendedor" },
+          },
+        },
+      },
       "/store/admin/products/{id}/stock": {
         patch: { ...seller, summary: "Atualiza a quantidade em estoque", parameters: [pathId()],
           requestBody: jsonBody({ expectedQuantity: quantity, quantity }),

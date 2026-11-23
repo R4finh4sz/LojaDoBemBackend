@@ -9,6 +9,7 @@ import { barcodePattern } from "@/dto/store/barcode-pattern";
 import { checkoutCart, createCart, deleteCart, getCart, listCarts, setCartItem } from "@/services/Main/store/sales-cart.service";
 import { exportMunicipalStore } from "@/services/Main/store/store-export.service";
 import { updateMunicipalStock } from "@/services/Main/store/store.service";
+import { getMunicipalDashboard } from "@/services/Main/store/municipal-dashboard.service";
 
 const router = Router();
 router.use(authMiddleware);
@@ -19,6 +20,10 @@ router.post("/redemptions", requireRole(Role.USER), validateDto(RedeemProductDto
 router.get("/redemptions", requireRole(Role.USER), userRedemptionsController);
 
 const seller = requireRole(Role.PrefeituraVendedor);
+router.get("/admin/dashboard", seller, (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  return respond(res, () => getMunicipalDashboard(req.user!.id));
+});
 const uuid = z.string().uuid();
 const cartItemInput = z.object({
   productId: uuid.optional(),

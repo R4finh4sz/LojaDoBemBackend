@@ -349,6 +349,24 @@
       "name": "PrefeituraVendedor",
       "item": [
         {
+          "name": "Consultar painel da Prefeitura",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sellerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [],
+            "url": "{{baseUrl}}/store/admin/dashboard"
+          }
+        },
+        {
           "name": "Pré-cadastrar munícipe",
           "request": {
             "method": "POST",

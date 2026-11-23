@@ -24,6 +24,8 @@ Para testar a ativação, copie o `challengeId` retornado pela primeira requisi�
 
 ## Estoque e venda presencial
 
+Use `GET /store/admin/dashboard` com `sellerToken` para consultar os indicadores do município do vendedor. A rota retorna pedidos concluídos, munícipes distintos atendidos e EcoCoins resgatadas, além de até 10 pedidos recentes e 5 itens mais retirados. Um carrinho concluído conta como um pedido. O percentual de cada item é sua participação no total de unidades retiradas no município.
+
 O catálogo e o estoque são compartilhados por município. No cadastro, informe o preço em EcoCoins e a imagem em `photo`. O campo opcional `barcode` é texto, inclusive para preservar zeros à esquerda. Use o mesmo campo na busca e na inclusão de itens no carrinho. Para ajustar o estoque, informe a quantidade atual em `expectedQuantity` e a quantidade desejada em `quantity`.
 
 1. Use a busca de munícipe por CPF na pasta `PrefeituraVendedor` e copie o ID para `userId`.
