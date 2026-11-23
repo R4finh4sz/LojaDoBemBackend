@@ -14,6 +14,24 @@ enum Role {
   MASTER
 }
 
+enum SecurityEventKind {
+  RATE_LIMIT_BLOCK
+  TWO_FACTOR_BLOCK
+}
+
+model SecurityEvent {
+  id          String            @id @default(uuid())
+  kind        SecurityEventKind
+  clientKey   String?
+  blockedUntil DateTime
+  createdAt   DateTime          @default(now())
+
+  @@index([kind, createdAt])
+  @@index([kind, blockedUntil, clientKey])
+  @@index([createdAt])
+  @@map("security_events")
+}
+
 enum TermType {
   USER
   ADMIN

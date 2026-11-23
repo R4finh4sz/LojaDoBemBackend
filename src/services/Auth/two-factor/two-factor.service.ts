@@ -128,20 +128,32 @@ export async function verifyTwoFactorChallenge(challengeId: string, code: string
 
   const candidateHash = hashCode(code, challenge.codeSalt);
   if (candidateHash !== challenge.codeHash) {
-    await prisma.twoFactorChallenge.update({
-      where: { id: challenge.id },
-      data: { attempts: { increment: 1 } },
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = await tx.twoFactorChallenge.updateMany({
+        where: { id: challenge.id, consumedAt: null, expiresAt: { gt: new Date() }, attempts: { lt: securityConfig.twoFactorMaxAttempts } },
+        data: { attempts: { increment: 1 } },
+      });
+      if (!updated.count) return null;
+      const state = await tx.twoFactorChallenge.findUniqueOrThrow({ where: { id: challenge.id } });
+      if (state.attempts === securityConfig.twoFactorMaxAttempts) {
+        await tx.securityEvent.create({ data: { kind: "TWO_FACTOR_BLOCK", blockedUntil: state.expiresAt } });
+      }
+      return state;
     });
+    if (!result || result.attempts >= securityConfig.twoFactorMaxAttempts) {
+      throw new TwoFactorChallengeBlockedError("Código 2FA bloqueado por excesso de tentativas");
+    }
 
     throw new InvalidTwoFactorCodeError("Código 2FA inválido");
   }
 
-  await prisma.twoFactorChallenge.update({
-    where: { id: challenge.id },
+  const consumed = await prisma.twoFactorChallenge.updateMany({
+    where: { id: challenge.id, consumedAt: null, expiresAt: { gt: new Date() }, attempts: { lt: securityConfig.twoFactorMaxAttempts } },
     data: {
       consumedAt: new Date(),
     },
   });
+  if (!consumed.count) throw new TwoFactorChallengeNotFoundError("Desafio 2FA indisponível");
 
   return challenge.user;
 }

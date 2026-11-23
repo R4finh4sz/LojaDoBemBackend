@@ -103,6 +103,24 @@
       "name": "MASTER",
       "item": [
         {
+          "name": "Consultar painel do MASTER",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{masterToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [],
+            "url": "{{baseUrl}}/master/dashboard"
+          }
+        },
+        {
           "name": "Cadastrar vendedor",
           "request": {
             "method": "POST",

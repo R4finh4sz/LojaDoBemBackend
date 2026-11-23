@@ -6,6 +6,7 @@ import termsRoutes from "@/routes/terms.routes";
 import storeRoutes from "@/routes/store.routes";
 import accountRoutes from "@/routes/account.routes";
 import residentsRoutes from "@/routes/residents.routes";
+import masterRoutes from "@/routes/master.routes";
 import { authMiddleware } from "@/middlewares/auth.middleware";
 import { rateLimitMiddleware } from "@/middlewares/security.middleware";
 import { swaggerSpec } from "@/swagger";
@@ -27,6 +28,7 @@ app.use("/terms", termsRoutes);
 app.use("/store", storeRoutes);
 app.use("/account", accountRoutes);
 app.use("/residents", residentsRoutes);
+app.use("/master", masterRoutes);
 
 app.get("/me", authMiddleware, (req, res) => {
   res.json({

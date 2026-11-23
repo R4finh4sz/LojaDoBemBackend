@@ -537,6 +537,19 @@ export const swaggerSpec = swaggerJSDoc({
       },
     },
     paths: {
+      "/master/dashboard": {
+        get: {
+          tags: ["MASTER"],
+          summary: "Consulta indicadores administrativos e saúde atual do sistema",
+          security: [{ bearerAuth: [] }],
+          responses: {
+            200: { description: "Cadastros, EcoCoins, eventos de segurança, atividades recentes e saúde atual" },
+            401: { description: "Sessão ausente, expirada ou inválida" },
+            403: { description: "Rota exclusiva do MASTER" },
+            503: { description: "Painel temporariamente indisponível" },
+          },
+        },
+      },
       "/account/export": {
         get: {
           tags: ["Conta e LGPD"],

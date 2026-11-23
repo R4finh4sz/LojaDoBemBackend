@@ -1,5 +1,15 @@
 # Atendimento municipal
 
+## Painel do MASTER
+
+Use `GET /master/dashboard` com `masterToken`. A resposta reúne o cadastro de operador mais recente, créditos de EcoCoins, bloqueios de 2FA, sanções de rate limit, atividade recente e estado atual do sistema.
+
+Os créditos mensais comparam o mês atual até o momento com o mês anterior completo no horário de São Paulo. Sem créditos no mês anterior, `changePercent` é `null`. A contagem de segurança começa com o novo registro de eventos. `activeClients` conta origens de rede distintas com bloqueios registrados ainda dentro do prazo.
+
+O estado de autenticação considera a sessão do próprio pedido, e processamento usa a última execução local dos jobs de trocas e carrinhos. `availabilityPercent` é `null` enquanto não houver histórico de monitoramento de disponibilidade.
+
+## Cadastros e créditos
+
 Importe `LojaDoBem.atendimento-municipal.postman_collection.json` e configure `baseUrl` e os tokens locais. O cadastro de operadores exige um token do `MASTER` e valida cidade e UF pelo CEP. O cadastro de vendedor também exige CNPJ.
 
 O crédito usa `POST /residents/credits` com token da `COOPERATIVA`. Envie uma chave distinta no cabeçalho `Idempotency-Key` para cada operação e reutilize a chave ao reenviar o mesmo pedido. Compras no app também aceitam esse cabeçalho.
