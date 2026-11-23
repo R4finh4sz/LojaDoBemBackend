@@ -10,10 +10,10 @@ import { decryptedLocation, resolveMunicipality, sameLocation } from "./municipa
 
 export async function createResident(actorId: string, input: {
   name: string; cpf: string; birthDate: Date; cep: string;
-  address: string; addressNumber: string; email: string; authorizationPdf?: string;
+  address: string; addressNumber: string; email: string; authorizationDocument?: string;
 }) {
   const location = await resolveMunicipality(input.cep);
-  const actor = await prisma.user.findUnique({ where: { id: actorId, active: true, role: { in: [Role.COOPERATIVA, Role.PrefeituraVendedor] } } });
+  const actor = await prisma.user.findUnique({ where: { id: actorId, active: true, role: Role.PrefeituraVendedor } });
   if (!actor || !sameLocation(decryptedLocation(actor), location)) {
     throw new StoreError("CEP fora do município do operador", 403);
   }
@@ -31,7 +31,8 @@ export async function createResident(actorId: string, input: {
       cep: encryptSensitiveData(input.cep),
       address: encryptSensitiveData(input.address),
       addressNumber: encryptSensitiveData(input.addressNumber),
-      authorizationPdf: input.authorizationPdf ? encryptSensitiveData(input.authorizationPdf) : undefined,
+      // Reuse the existing encrypted column for all supported document formats.
+      authorizationPdf: input.authorizationDocument ? encryptSensitiveData(input.authorizationDocument) : undefined,
       city: encryptSensitiveData(location.city),
       state: encryptSensitiveData(location.state),
       phone: "",

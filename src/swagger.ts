@@ -1190,12 +1190,12 @@ export const swaggerSpec = swaggerJSDoc({
       },
       "/residents/pre-registrations": {
         post: { ...residents, summary: "Pré-cadastra munícipe do mesmo município",
-          description: "Disponível para COOPERATIVA e PrefeituraVendedor.",
+          description: "Disponível apenas para PrefeituraVendedor.",
           requestBody: jsonBody({
             cpf, name: { type: "string" }, birthDate: { type: "string", format: "date", description: "Idade de 18 a 90 anos, inclusive." },
             cep: { type: "string" }, address: { type: "string" }, addressNumber: { type: "string" },
             email: { type: "string", format: "email" },
-            authorizationPdf: { type: "string", format: "byte", description: "PDF opcional de até 2 MiB" },
+            authorizationDocument: { type: "string", format: "byte", description: "Um termo assinado em JPG, PNG ou PDF de até 2 MiB" },
           }, ["cpf", "name", "birthDate", "cep", "address", "addressNumber", "email"]),
           responses: { 201: { description: "Pré-cadastro criado" }, 400: { description: "Dados inválidos" }, 403: { description: "Perfil ou município sem acesso" }, 409: { description: "CPF ou e-mail em uso" } },
         },

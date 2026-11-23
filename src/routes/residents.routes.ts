@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { authMiddleware, requireRole } from "@/middlewares/auth.middleware";
 import { registerFields } from "@/validation/register.validation";
+import { authorizationDocument, legacyAuthorizationPdf } from "@/validation/authorization-document.validation";
 import { createSearchHash } from "@/services/Auth/data-protection/data-protection.service";
 import { UserAlreadyExistsError } from "@/services/Auth/register/register.service";
 import { activateResident, confirmActivation, createResident, findResident, startActivation } from "@/services/Main/residents/residents.service";
@@ -17,12 +18,14 @@ const id = z.string().uuid();
 const passwordFields = registerFields.pick({ phone: true, password: true, passwordConfirmation: true, termsAccepted: true });
 const residentFields = registerFields.pick({ cpf: true, name: true, birthDate: true, cep: true, address: true, email: true }).extend({
   addressNumber: z.string().trim().min(1).max(30),
-  authorizationPdf: z.string().max(2_796_204).regex(/^[A-Za-z0-9+/]+={0,2}$/).refine((value) => {
-    const pdf = Buffer.from(value, "base64");
-    return pdf.length <= 2 * 1024 * 1024 && pdf.toString("base64") === value &&
-      pdf.subarray(0, 5).toString() === "%PDF-" && pdf.subarray(-1024).includes(Buffer.from("%%EOF"));
-  }, "Informe um PDF válido de até 2 MiB em Base64").optional(),
-});
+  authorizationDocument: authorizationDocument.optional(),
+  authorizationPdf: legacyAuthorizationPdf.optional(),
+}).refine(({ authorizationDocument, authorizationPdf }) => !(authorizationDocument && authorizationPdf), {
+  message: "Envie apenas um termo assinado",
+  path: ["authorizationDocument"],
+}).transform(({ authorizationDocument, authorizationPdf, ...resident }) => ({
+  ...resident, authorizationDocument: authorizationDocument ?? authorizationPdf,
+}));
 
 function requestKey(req: Request) {
   return createSearchHash(z.string().trim().min(1).max(128).parse(req.get("Idempotency-Key")));
@@ -63,7 +66,7 @@ router.post("/activation/complete", handle(async (req) => {
 
 router.use(authMiddleware);
 
-router.post("/pre-registrations", requireRole(Role.COOPERATIVA, Role.PrefeituraVendedor), handle(async (req) =>
+router.post("/pre-registrations", requireRole(Role.PrefeituraVendedor), handle(async (req) =>
   createResident(req.user!.id, residentFields.parse(req.body)), 201));
 router.delete("/pre-registrations/:id", requireRole(Role.MASTER), handle(async (req) =>
   eraseAccount(id.parse(req.params.id), true), 204));
