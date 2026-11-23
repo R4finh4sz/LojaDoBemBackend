@@ -37,5 +37,9 @@ export const redeemController = (req: Request, res: Response) => respond(res, as
   return { redemption: await redeemProduct(req.user!.id, req.body.productId, req.body.quantity, key ? createSearchHash(key) : undefined) };
 }, 201);
 export const userRedemptionsController = (req: Request, res: Response) => respond(res, async () => ({ redemptions: await listUserRedemptions(req.user!.id) }));
-export const adminRedemptionsController = (req: Request, res: Response) => respond(res, async () => ({ redemptions: await listAdminRedemptions(req.user!.id) }));
+export const adminRedemptionsController = (req: Request, res: Response) => respond(res, async () => {
+  const protocol = z.union([z.string().regex(/^\d{10,18}$/), z.string().uuid()]).optional().parse(req.query.protocol);
+  res.setHeader("Cache-Control", "no-store");
+  return { redemptions: await listAdminRedemptions(req.user!.id, protocol?.toLowerCase()) };
+});
 export const validatePickupController = (req: Request, res: Response) => respond(res, async () => ({ redemption: await validatePickupCode(req.user!.id, req.body.code) }));

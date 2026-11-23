@@ -184,7 +184,15 @@ model StoreAudit {
   @@map("store_audit")
 }
 
+model StoreSaleCounter {
+  day      String @id
+  sequence Int
+
+  @@map("store_sale_counters")
+}
+
 model Redemption {
+  protocol      String?
   id            String           @id @default(uuid())
   cartId        String?
   userId        String
@@ -203,6 +211,7 @@ model Redemption {
   product       Product          @relation(fields: [productId], references: [id])
   validatedBy   User?            @relation("ValidatedRedemptions", fields: [validatedById], references: [id])
 
+  @@index([protocol])
   @@index([userId, status])
   @@index([productId, status])
   @@index([status, expiresAt])

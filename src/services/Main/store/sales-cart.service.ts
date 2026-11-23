@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { decryptSensitiveData } from "@/services/Auth/data-protection/data-protection.service";
 import { decryptedLocation, municipalProducts, sameLocation } from "@/services/Main/residents/municipality";
 import { StoreError } from "./exceptions/StoreError";
 import { InsufficientBalanceError } from "./exceptions/InsufficientBalanceError";
@@ -89,14 +90,24 @@ export function setCartItem(sellerId: string, id: string, identifier: { productI
   });
 }
 
-function saleReceipt(id: string, audit: {
+async function saleReceipt(tx: Prisma.TransactionClient, sellerId: string, id: string, audit: {
   id: string; userId: string; redemptionId: string | null; productId: string | null;
   quantity: number | null; amount: Prisma.Decimal; balanceAfter: Prisma.Decimal;
 }[]) {
   const balanceAfter = Prisma.Decimal.min(...audit.map((row) => row.balanceAfter));
   const total = audit.reduce((sum, row) => sum.sub(row.amount), new Prisma.Decimal(0));
+  const buyerId = audit[0].userId;
+  const [sale, people] = await Promise.all([
+    tx.redemption.findFirst({ where: { id: audit[0].redemptionId ?? undefined, cartId: id }, select: { protocol: true } }),
+    tx.user.findMany({ where: { id: { in: [buyerId, sellerId] }, deletedAt: null }, select: { id: true, name: true } }),
+  ]);
+  const name = (userId: string) => {
+    const person = people.find((user) => user.id === userId);
+    return person ? decryptSensitiveData(person.name) : null;
+  };
   return {
-    saleId: id, buyerId: audit[0].userId, total, ecoCoinBalance: balanceAfter,
+    saleId: id, protocol: sale?.protocol ?? id, buyerId, buyerName: name(buyerId), sellerName: name(sellerId),
+    total, ecoCoinBalance: balanceAfter,
     items: audit.map(({ id: auditId, redemptionId, productId, quantity, amount }) => ({
       auditId, redemptionId, productId, quantity, total: amount.negated(),
     })),
@@ -107,7 +118,7 @@ export function checkoutCart(sellerId: string, id: string) {
   return auditedOperation(async (tx) => {
     const location = await sellerMunicipality(sellerId, tx);
     const existing = await tx.storeAudit.findMany({ where: { actorId: sellerId, cartId: id }, orderBy: { productId: "asc" } });
-    if (existing.length) return saleReceipt(id, existing);
+    if (existing.length) return saleReceipt(tx, sellerId, id, existing);
     const cart = await requireCart(sellerId, id, tx);
     if (!cart.items.length) throw new StoreError("Adicione pelo menos um item ao carrinho", 409);
     const buyer = await requireBuyer(tx, cart.buyerId, location);
@@ -121,6 +132,11 @@ export function checkoutCart(sellerId: string, id: string) {
       data: { ecoCoinBalance: { decrement: total } },
     });
     if (!debit.count) throw new InsufficientBalanceError();
+    const day = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo" }).format(now).replaceAll("/", "");
+    const counter = await tx.storeSaleCounter.upsert({
+      where: { day }, create: { day, sequence: 1 }, update: { sequence: { increment: 1 } },
+    });
+    const protocol = day + String(counter.sequence).padStart(2, "0");
     let balance = buyer.ecoCoinBalance;
     const audit = [];
     for (const { productId, product, quantity } of cart.items) {
@@ -134,7 +150,7 @@ export function checkoutCart(sellerId: string, id: string) {
       if (!stock.count) throw new InsufficientStockError();
       const itemTotal = product.price.mul(quantity);
       const sale = await tx.redemption.create({ data: {
-        cartId: id, userId: buyer.id, productId, quantity, unitPrice: product.price, totalPrice: itemTotal,
+        cartId: id, protocol, userId: buyer.id, productId, quantity, unitPrice: product.price, totalPrice: itemTotal,
         status: "COMPLETED", completedAt: now, expiresAt: now, validatedById: sellerId,
       } });
       const amount = itemTotal.negated();
@@ -148,6 +164,6 @@ export function checkoutCart(sellerId: string, id: string) {
         redemptionId: sale.id, productId, quantity, amount, balanceBefore, balanceAfter: balance,
       } }));
     }
-    return saleReceipt(id, audit);
+    return saleReceipt(tx, sellerId, id, audit);
   });
 }

@@ -178,15 +178,26 @@ export async function listUserRedemptions(userId: string) {
   });
 }
 
-export async function listAdminRedemptions(adminId: string) {
-  await expirePendingRedemptions();
+export async function listAdminRedemptions(adminId: string, protocol?: string) {
+  if (!protocol) await expirePendingRedemptions();
   const location = await sellerMunicipality(adminId);
-  const redemptions = await prisma.redemption.findMany({
+  const query = {
     where: { product: municipalProducts(location) },
     select: { ...redemptionPublicSelect, product: { select: productPublicSelect }, user: { select: { name: true } } },
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: "desc" as const },
+  };
+  if (!protocol) return (await prisma.redemption.findMany(query)).map(decryptPickupUser);
+
+  const sales = await prisma.redemption.findMany({
+    ...query,
+    where: { ...query.where, status: RedemptionStatus.COMPLETED, cartId: { not: null },
+      OR: [{ protocol }, { cartId: protocol }] },
+    select: { ...query.select, protocol: true, validatedBy: { select: { name: true } } },
   });
-  return redemptions.map(decryptPickupUser);
+  return sales.map(({ validatedBy, ...sale }) => ({
+    ...decryptPickupUser(sale),
+    sellerName: validatedBy?.name ? decryptSensitiveData(validatedBy.name) : null,
+  }));
 }
 
 export async function validatePickupCode(adminId: string, code: string) {
