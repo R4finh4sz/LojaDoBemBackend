@@ -19,6 +19,11 @@ export const dataProtectionConfig = {
   encryptionKey: getRequiredEnv("DATA_ENCRYPTION_KEY"),
 };
 
+export const masterConfig = {
+  email: process.env.MASTER_EMAIL?.trim().toLowerCase(),
+  password: process.env.MASTER_PASSWORD,
+};
+
 export const brevoConfig = {
   smtpHost: process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com",
   smtpPort: Number(process.env.BREVO_SMTP_PORT || 587),

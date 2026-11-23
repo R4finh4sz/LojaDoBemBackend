@@ -17,6 +17,12 @@ yarn prisma:migrate
 yarn dev
 ```
 
+## Conta MASTER
+
+Para criar a conta `MASTER` na primeira inicialização, preencha `MASTER_EMAIL` e `MASTER_PASSWORD` no `.env`. Se já houver um `MASTER`, informe o e-mail dessa conta. Deixe os dois campos vazios para iniciar sem provisionamento automático. Use uma senha com pelo menos 12 caracteres e até 72 bytes em UTF-8.
+
+Para trocar a senha desse `MASTER`, altere `MASTER_PASSWORD` e reinicie a API. A troca revoga as sessões e os desafios 2FA anteriores. O login continua exigindo 2FA por e-mail. Se a conta for excluída com as variáveis ainda preenchidas, ela será criada novamente na próxima inicialização.
+
 ## Swagger
 
 No navegador, abra `/docs/login` e cole o token de uma sessão ativa do `MASTER`, obtido após a validação 2FA. A página redireciona para `/docs/`. Em produção, acesse por HTTPS. Para executar chamadas pela interface, use **Authorize** e informe um token com o perfil exigido pela rota.
