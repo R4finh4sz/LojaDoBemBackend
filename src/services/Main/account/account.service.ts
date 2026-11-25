@@ -3,6 +3,7 @@ import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decryptSensitiveData } from "@/services/Auth/data-protection/data-protection.service";
 import { verifyPassword } from "@/services/Auth/password/password.service";
+import { refundPendingRedemption } from "@/services/Main/store/store.service";
 import { auditedOperation } from "@/services/Main/store/store-audit.service";
 
 export class AccountError extends Error {
@@ -33,25 +34,21 @@ export async function eraseAccount(userId: string, pendingOnly: boolean, passwor
         deletedAt: new Date(), active: false, pendingActivation: false, termsAccepted: false,
         name: "", cpf: "", cpfHash: null, email: "", emailHash: null, birthDate: "",
         phone: "", cep: "", address: "", city: "", state: "", password: "", cnpj: null,
-        profilePhoto: null, jobTitle: null, addressNumber: null, authorizationPdf: null, ecoCoinBalance: 0,
+        profilePhoto: null, jobTitle: null, addressNumber: null, authorizationPdf: null,
       },
     });
     if (!claimed.count) throw new AccountError("Conta não encontrada para exclusão", 404);
-    const pending = await tx.redemption.findMany({ where: { userId, status: "PENDING" } });
-    for (const redemption of pending) {
-      await tx.redemption.update({
-        where: { id: redemption.id }, data: { status: "EXPIRED", pickupCode: null },
-      });
-      await tx.product.update({
-        where: { id: redemption.productId }, data: { quantity: { increment: redemption.quantity } },
-      });
+    const pending = await tx.redemption.findMany({ where: { userId, status: "PENDING" }, select: { id: true } });
+    for (const { id } of pending) {
+      await refundPendingRedemption(tx, id, "Estorno por exclusão da conta");
     }
-    await tx.salesCart.deleteMany({ where: { OR: [{ sellerId: userId }, { buyerId: userId }] } });
+    await tx.salesCart.deleteMany({ where: { buyerId: userId } });
     await tx.residentActivation.deleteMany({ where: { userId } });
     await tx.termAccept.deleteMany({ where: { userId } });
     await tx.passwordResetChallenge.deleteMany({ where: { userId } });
     await tx.twoFactorChallenge.deleteMany({ where: { userId } });
     await tx.session.deleteMany({ where: { userId } });
+    return recipient?.email;
   });
 }
 
@@ -64,6 +61,7 @@ async function getAccountExport(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId, deletedAt: null },
     include: {
+      municipalWallet: { select: { balance: true } },
       termAccepts: { include: { term: true }, orderBy: { acceptedAt: "desc" } },
       redemptions: { include: { product: true }, orderBy: { createdAt: "desc" } },
       ecoCoinTransactions: { orderBy: { createdAt: "desc" } },
@@ -96,7 +94,8 @@ export async function exportAccountJson(userId: string) {
   return {
     exportedAt: new Date(),
     account: { ...personal, id: user.id, role: user.role, active: user.active,
-      ecoCoinBalance: user.ecoCoinBalance.toFixed(2), createdAt: user.createdAt, updatedAt: user.updatedAt },
+      ecoCoinBalance: user.role === "USER" ? (user.municipalWallet?.balance ?? user.legacyEcoCoinBalance).toFixed(2) : null,
+      createdAt: user.createdAt, updatedAt: user.updatedAt },
     terms: user.termAccepts.map(({ acceptedAt, term }) => ({ title: term.title, type: term.type, version: term.version, acceptedAt })),
     redemptions: user.redemptions.map(({ id, product, quantity, totalPrice, status, createdAt }) => ({
       id, product: product.name, quantity, totalPrice: totalPrice.toFixed(2), status, createdAt,
@@ -139,7 +138,9 @@ export async function exportAccountPdf(userId: string): Promise<Buffer> {
     addField(doc, "Foto de perfil", personal.profilePhoto);
     addField(doc, "Perfil", user.role);
     addField(doc, "Conta ativa", user.active ? "Sim" : "Não");
-    addField(doc, "Saldo EcoCoin", user.ecoCoinBalance.toFixed(2));
+    if (user.role === "USER") {
+      addField(doc, "Saldo EcoCoin", (user.municipalWallet?.balance ?? user.legacyEcoCoinBalance).toFixed(2));
+    }
     addField(doc, "Criada em", user.createdAt.toLocaleString("pt-BR"));
     addField(doc, "Atualizada em", user.updatedAt.toLocaleString("pt-BR"));
 

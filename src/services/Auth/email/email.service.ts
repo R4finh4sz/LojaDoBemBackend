@@ -15,7 +15,6 @@ function getEmailErrorMessage(err: unknown) {
 
 interface SendEmailParams {
   to: string;
-  name: string;
   subject: string;
   htmlContent: string;
   textContent?: string;

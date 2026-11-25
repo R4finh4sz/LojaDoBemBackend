@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { decryptSensitiveData } from "@/services/Auth/data-protection/data-protection.service";
@@ -6,19 +7,27 @@ import { StoreError } from "@/services/Main/store/exceptions/StoreError";
 type Location = { city: string; state: string };
 
 export function sameLocation(a: Location, b: Location) {
-  const normalize = (value: string) => value.trim().normalize("NFC").toLocaleLowerCase("pt-BR");
-  return normalize(a.city) === normalize(b.city) && normalize(a.state) === normalize(b.state);
+  const first = normalizeMunicipality(a);
+  const second = normalizeMunicipality(b);
+  return first.city === second.city && first.state === second.state;
 }
 
 export function decryptedLocation(value: Location) {
   return { city: decryptSensitiveData(value.city), state: decryptSensitiveData(value.state) };
 }
 
-export function municipalProducts(location: Location): Prisma.ProductWhereInput {
-  return {
-    city: { equals: location.city, mode: "insensitive" },
-    state: { equals: location.state, mode: "insensitive" },
-  };
+export function normalizeMunicipality({ city, state }: Location): Location {
+  const normalize = (value: string) => value.trim().normalize("NFC").toLowerCase();
+  return { city: normalize(city), state: normalize(state) };
+}
+
+export async function ensureMunicipality(tx: Prisma.TransactionClient, location: Location) {
+  const { city, state } = normalizeMunicipality(location);
+  await tx.$executeRaw`
+    INSERT INTO municipalities (id, city, state) VALUES (${randomUUID()}, ${city}, ${state})
+    ON CONFLICT (city, state) DO NOTHING
+  `;
+  return tx.municipality.findUniqueOrThrow({ where: { city_state: { city, state } } });
 }
 
 export async function resolveMunicipality(cep: string): Promise<Location> {

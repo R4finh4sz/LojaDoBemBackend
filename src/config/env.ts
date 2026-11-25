@@ -8,6 +8,10 @@ function getRequiredEnv(name: string): string {
   return value;
 }
 
+export const corsConfig = {
+  allowedOrigin: process.env.CORS_ALLOWED_ORIGIN?.trim(),
+};
+
 export const authConfig = {
   jwtSecret: getRequiredEnv("JWT_SECRET"),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "1h",

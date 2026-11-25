@@ -14,8 +14,23 @@ Preencha `RESEND_API_KEY` e `RESEND_SENDER_EMAIL` para os fluxos que enviam e-ma
 yarn install
 yarn prisma:generate
 yarn prisma:migrate
+yarn build
+yarn data:municipal-ownership
 yarn dev
 ```
+
+## Prefeitura e EcoCoins
+
+O MASTER cadastra a prefeitura em `POST /master/municipalities`. Envie `name` (nome completo), `address` (endereço), `cep` e `cnpj`. A API consulta o ViaCEP para definir cidade e UF e retorna `201` com os dados cadastrados. Se a prefeitura já tiver um registro antigo com apenas cidade e UF, a rota completa os dados e retorna `200` com o mesmo ID. Uma prefeitura completa na mesma cidade e UF ou um CNPJ já cadastrado retorna `409`.
+
+Ao cadastrar vendedor (`POST /auth/register/admin`), munícipe (`POST /auth/register/user`) ou cooperativa (`POST /auth/register/cooperative`), informe o CEP de cada conta. Todos os CEPs do mesmo município e UF são vinculados à mesma prefeitura. `city` e `state` são opcionais e, quando enviados, devem corresponder ao CEP. Se a prefeitura ainda não estiver cadastrada, o cadastro retorna `404`. Os vínculos existentes são preservados.
+
+- `PATCH /account/profile` aceita apenas `cep`, `address` e `addressNumber`. A troca de CEP atualiza a cidade e a UF do endereço. O vínculo com a prefeitura continua o mesmo.
+- `POST /residents/credits` permite à cooperativa emitir EcoCoins para a carteira de um munícipe da mesma prefeitura. A cooperativa não tem carteira nem saldo próprios.
+- Estoque, vendas e movimentações ficam vinculados à prefeitura. Ao excluir a conta de um vendedor, os dados pessoais são apagados e a prefeitura continua com seu catálogo e seu histórico.
+- `DELETE /residents/:id` permite ao vendedor excluir os dados pessoais de um munícipe da mesma prefeitura e encerra suas sessões. A API tenta enviar a confirmação ao e-mail do munícipe após a exclusão. A resposta `200` traz `deleted: true` e `emailSent`, que indica se o Resend aceitou o envio.
+
+Em um banco existente, pare a API, aplique as migrações (`yarn prisma migrate deploy` em produção) e execute `yarn prisma:generate`, `yarn build` e `yarn data:municipal-ownership` antes de reiniciar. O comando usa a `DATA_ENCRYPTION_KEY` original para identificar o município dos cadastros existentes, copia os saldos para as carteiras e pode ser repetido. Registros históricos sem município identificável são preservados e contabilizados na saída do comando.
 
 ## Conta MASTER
 
@@ -32,6 +47,17 @@ Contas novas começam com 2FA desativado. A migração mantém a verificação p
 - `POST /auth/login` retorna `twoFactorRequired: false` e `token` quando o 2FA está desativado. Quando retorna `twoFactorRequired: true` e `challengeId`, envie o código do e-mail para `POST /auth/2fa/verify` para obter o token.
 
 Excluir o `MASTER` encerra a API após a resposta de exclusão. O banco preserva a identidade da conta e o servidor recusa novas inicializações até ela ser restaurada. A API também verifica a cada cinco segundos se a conta continua ativa.
+
+## Primeiro acesso de vendedores e cooperativas
+
+O cadastro feito pelo MASTER usa o CPF sem pontuação como senha inicial. O operador aceita os termos na própria conta. Antes do primeiro acesso, publique um termo do tipo `ADMIN` em `POST /terms/create`.
+
+1. Envie o e-mail e o CPF sem pontuação como senha para `POST /auth/login`. A resposta inclui `firstLogin: true` e `challengeId`.
+2. Confirme o código enviado ao e-mail em `POST /auth/2fa/verify`. A resposta inclui `firstLoginToken`, válido por 15 minutos.
+3. Use esse token como Bearer em `GET /auth/first-login/terms` para exibir o termo vigente.
+4. Depois que o operador marcar **O operador leu e aceitou os termos de uso.**, envie `password`, `passwordConfirmation`, `termDocumentId` (o `documentId` retornado na consulta) e `termsAccepted: true` para `POST /auth/first-login`, com o mesmo Bearer. A resposta contém o token da sessão normal.
+
+Esse fluxo vale para novos vendedores e cooperativas. Contas já cadastradas continuam usando suas credenciais atuais.
 
 ## Swagger
 

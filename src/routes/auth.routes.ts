@@ -1,6 +1,7 @@
 import { Router, urlencoded } from "express";
 import { Role } from "@prisma/client";
 import { loginController } from "@/controllers/Auth/login/login.controller";
+import { completeFirstLoginController, firstLoginTermController } from "@/controllers/Auth/first-login/first-login.controller";
 import { logoutController } from "@/controllers/Main/logout/logout.controller";
 import { verifyTwoFactorController } from "@/controllers/Auth/two-factor/two-factor.controller";
 import {
@@ -22,6 +23,8 @@ router.get("/register/operator-invitation", getOperatorInvitation);
 router.post("/register/operator-invitation", urlencoded({ extended: false, limit: "16kb" }), postOperatorInvitation);
 router.post("/login", loginController);
 router.post("/2fa/verify", verifyTwoFactorController);
+router.get("/first-login/terms", firstLoginTermController);
+router.post("/first-login", completeFirstLoginController);
 router.post("/password/forgot", forgotPasswordController);
 router.post("/password/verify-code", verifyPasswordResetCodeController);
 router.post("/password/reset", resetPasswordController);

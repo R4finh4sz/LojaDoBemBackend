@@ -5,43 +5,73 @@ import { createSearchHash, decryptSensitiveData, encryptSensitiveData } from "@/
 import { sendEmail } from "@/services/Auth/email/email.service";
 import { hashPassword } from "@/services/Auth/password/password.service";
 import { ensureAvailableIdentity } from "@/services/Auth/register/register.service";
+import { eraseAccount } from "@/services/Main/account/account.service";
 import { StoreError } from "@/services/Main/store/exceptions/StoreError";
 import { decryptedLocation, resolveMunicipality, sameLocation } from "./municipality";
+
+export async function deleteMunicipalResident(sellerId: string, residentId: string) {
+  const email = await eraseAccount(residentId, undefined, undefined, sellerId);
+  if (!email) return { deleted: true, emailSent: false };
+
+  const message = "Os dados pessoais da sua conta foram excluídos da plataforma Loja do Bem.";
+  try {
+    await sendEmail({
+      to: decryptSensitiveData(email),
+      subject: "Confirmação de exclusão de dados da Loja do Bem",
+      textContent: message,
+      htmlContent: `<p>${message}</p>`,
+    });
+    return { deleted: true, emailSent: true };
+  } catch (error) {
+    console.error("Falha ao enviar confirmação de exclusão", error instanceof Error ? error.name : "Erro desconhecido");
+    return { deleted: true, emailSent: false };
+  }
+}
 
 export async function createResident(actorId: string, input: {
   name: string; cpf: string; birthDate: Date; cep: string;
   address: string; addressNumber: string; email: string; authorizationDocument: string;
 }) {
   const location = await resolveMunicipality(input.cep);
-  const actor = await prisma.user.findUnique({ where: { id: actorId, active: true, role: Role.PrefeituraVendedor } });
-  if (!actor || !sameLocation(decryptedLocation(actor), location)) {
+  const actor = await prisma.user.findUnique({
+    where: { id: actorId, active: true, deletedAt: null, role: Role.PrefeituraVendedor },
+    select: { municipality: true },
+  });
+  if (!actor?.municipality || !sameLocation(actor.municipality, location)) {
     throw new StoreError("CEP fora do município do operador", 403);
   }
   const cpfHash = createSearchHash(input.cpf);
   const emailHash = createSearchHash(input.email);
   await ensureAvailableIdentity(input.cpf, input.email, cpfHash, emailHash);
-  return prisma.user.create({
-    data: {
-      name: encryptSensitiveData(input.name),
-      cpf: encryptSensitiveData(input.cpf),
-      cpfHash,
-      email: encryptSensitiveData(input.email),
-      emailHash,
-      birthDate: encryptSensitiveData(input.birthDate.toISOString()),
-      cep: encryptSensitiveData(input.cep),
-      address: encryptSensitiveData(input.address),
-      addressNumber: encryptSensitiveData(input.addressNumber),
-      // Reuse the existing encrypted column for all supported document formats.
-      authorizationPdf: encryptSensitiveData(input.authorizationDocument),
-      city: encryptSensitiveData(location.city),
-      state: encryptSensitiveData(location.state),
-      phone: "",
-      password: await hashPassword(randomBytes(32).toString("hex")),
-      active: false,
-      pendingActivation: true,
-      preRegisteredById: actorId,
-    },
-    select: { id: true, pendingActivation: true, ecoCoinBalance: true },
+  const municipalityId = actor.municipality.id;
+  const password = await hashPassword(randomBytes(32).toString("hex"));
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        name: encryptSensitiveData(input.name),
+        cpf: encryptSensitiveData(input.cpf),
+        cpfHash,
+        email: encryptSensitiveData(input.email),
+        emailHash,
+        birthDate: encryptSensitiveData(input.birthDate.toISOString()),
+        cep: encryptSensitiveData(input.cep),
+        address: encryptSensitiveData(input.address),
+        addressNumber: encryptSensitiveData(input.addressNumber),
+        // Reuse the existing encrypted column for all supported document formats.
+        authorizationPdf: encryptSensitiveData(input.authorizationDocument),
+        city: encryptSensitiveData(location.city),
+        state: encryptSensitiveData(location.state),
+        phone: "",
+        password,
+        municipalityId,
+        active: false,
+        pendingActivation: true,
+        preRegisteredById: actorId,
+      },
+      select: { id: true, pendingActivation: true },
+    });
+    const wallet = await tx.municipalWallet.create({ data: { userId: user.id, municipalityId } });
+    return { ...user, ecoCoinBalance: wallet.balance };
   });
 }
 
@@ -80,7 +110,7 @@ export async function startActivation(cpf: string) {
     }
     try {
       await sendEmail({
-        to: decryptSensitiveData(user.email), name: "",
+        to: decryptSensitiveData(user.email),
         subject: "Ativação da sua conta Loja do Bem",
         htmlContent: `<p>Seu código de ativação é <strong>${code}</strong>. Ele expira em 15 minutos.</p>`,
       });

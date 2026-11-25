@@ -24,6 +24,7 @@ export async function login({ email, password }: LoginInput, metadata?: SessionM
       password: true,
       role: true,
       active: true,
+      firstLogin: true,
       twoFactorEnabled: true,
     },
   });
@@ -41,7 +42,7 @@ export async function login({ email, password }: LoginInput, metadata?: SessionM
     throw new InactiveUserError("Usuário desativado");
   }
 
-  if (!user.twoFactorEnabled) {
+  if (!user.firstLogin && !user.twoFactorEnabled) {
     return { twoFactorRequired: false, ...await issueSessionToken(user, metadata) };
   }
 
@@ -53,6 +54,7 @@ export async function login({ email, password }: LoginInput, metadata?: SessionM
 
   return {
     twoFactorRequired: true,
+    ...(user.firstLogin && { firstLogin: true as const }),
     challengeId: challenge.id,
     expiresAt: challenge.expiresAt,
     message: "Código 2FA enviado para o e-mail cadastrado",

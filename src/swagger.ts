@@ -32,6 +32,69 @@ const operatorBody = (vendor: boolean) => {
   }, Object.keys(required));
 };
 
+const registerOperatorInput = {
+  type: "object",
+  required: [
+    "name",
+    "cpf",
+    "birthDate",
+    "phone",
+    "cep",
+    "address",
+    "email",
+  ],
+  properties: {
+    name: {
+      type: "string",
+      minLength: 2,
+      maxLength: 100,
+      example: "joao da silva",
+    },
+    cpf: {
+      type: "string",
+      minLength: 11,
+      maxLength: 14,
+      example: "12345678909",
+    },
+    birthDate: {
+      type: "string",
+      format: "date",
+      description: "A idade no cadastro deve estar entre 18 e 90 anos, inclusive.",
+      example: "1990-05-20",
+    },
+    phone: {
+      type: "string",
+      example: "11999999999",
+    },
+    cep: {
+      type: "string",
+      example: "01001000",
+    },
+    address: {
+      type: "string",
+      example: "rua exemplo, 123",
+    },
+    city: {
+      type: "string",
+      example: "sao paulo",
+    },
+    state: {
+      type: "string",
+      example: "sp",
+    },
+    profilePhoto: {
+      type: "string",
+      nullable: true,
+      example: "https://exemplo.com/foto.jpg",
+    },
+    email: {
+      type: "string",
+      format: "email",
+      example: "usuario@email.com",
+    },
+  },
+};
+
 export const swaggerSpec = swaggerJSDoc({
   definition: {
     openapi: "3.0.0",
@@ -55,88 +118,15 @@ export const swaggerSpec = swaggerJSDoc({
         },
       },
       schemas: {
+        RegisterOperatorInput: registerOperatorInput,
         RegisterInput: {
-          type: "object",
-          required: [
-            "name",
-            "cpf",
-            "birthDate",
-            "phone",
-            "cep",
-            "address",
-            "city",
-            "state",
-            "termsAccepted",
-            "email",
-            "password",
-            "passwordConfirmation",
-          ],
+          ...registerOperatorInput,
+          required: [...registerOperatorInput.required, "termsAccepted", "password", "passwordConfirmation"],
           properties: {
-            name: {
-              type: "string",
-              minLength: 2,
-              maxLength: 100,
-              example: "joao da silva",
-            },
-            cpf: {
-              type: "string",
-              minLength: 11,
-              maxLength: 14,
-              example: "12345678909",
-            },
-            birthDate: {
-              type: "string",
-              format: "date",
-              description: "A idade no cadastro deve estar entre 18 e 90 anos, inclusive.",
-              example: "1990-05-20",
-            },
-            phone: {
-              type: "string",
-              example: "11999999999",
-            },
-            cep: {
-              type: "string",
-              example: "01001000",
-            },
-            address: {
-              type: "string",
-              example: "rua exemplo, 123",
-            },
-            city: {
-              type: "string",
-              example: "sao paulo",
-            },
-            state: {
-              type: "string",
-              example: "sp",
-            },
-            profilePhoto: {
-              type: "string",
-              nullable: true,
-              example: "https://exemplo.com/foto.jpg",
-            },
-            termsAccepted: {
-              type: "boolean",
-              enum: [true],
-              example: true,
-            },
-            email: {
-              type: "string",
-              format: "email",
-              example: "usuario@email.com",
-            },
-            password: {
-              type: "string",
-              minLength: 8,
-              maxLength: 128,
-              example: "12345678",
-            },
-            passwordConfirmation: {
-              type: "string",
-              minLength: 8,
-              maxLength: 128,
-              example: "12345678",
-            },
+            ...registerOperatorInput.properties,
+            termsAccepted: { type: "boolean", enum: [true], example: true },
+            password: { type: "string", minLength: 8, maxLength: 128 },
+            passwordConfirmation: { type: "string", minLength: 8, maxLength: 128 },
           },
         },
         LoginInput: {
@@ -343,6 +333,7 @@ export const swaggerSpec = swaggerJSDoc({
             required: ["twoFactorRequired", "challengeId", "expiresAt", "message"],
             properties: {
               twoFactorRequired: { type: "boolean", enum: [true] },
+              firstLogin: { type: "boolean", enum: [true], description: "Operador precisa concluir o primeiro acesso" },
               challengeId: { type: "string", format: "uuid" },
               expiresAt: { type: "string", format: "date-time" },
               message: { type: "string", example: "Código 2FA enviado para o e-mail cadastrado" },
@@ -355,6 +346,7 @@ export const swaggerSpec = swaggerJSDoc({
         },
         AuthResponse: {
           type: "object",
+          required: ["token"],
           properties: {
             token: {
               type: "string",
@@ -492,7 +484,7 @@ export const swaggerSpec = swaggerJSDoc({
           properties: {
             name: { type: "string", maxLength: 120 },
             description: { type: "string", maxLength: 2000 },
-            photo: { type: "string", maxLength: 2048 },
+            photo: { type: "string", maxLength: 90000 },
             barcode: { type: "string", maxLength: 64, example: "0012345678905" },
             price: { oneOf: [{ type: "string", example: "25.00" }, { type: "number", example: 25 }] },
             quantity: { type: "integer", minimum: 0 },
@@ -603,6 +595,41 @@ export const swaggerSpec = swaggerJSDoc({
           },
         },
       },
+      "/master/operators": {
+        get: {
+          tags: ["Master"], summary: "Lista vendedores municipais ou operadores de cooperativa", security: bearer,
+          parameters: [{ in: "query", name: "role", required: true, schema: { type: "string", enum: ["PrefeituraVendedor", "COOPERATIVA"] } }],
+          responses: { 200: { description: "Operadores cadastrados" }, 400: { description: "Perfil inválido" }, 401: { description: "Sessão inválida" }, 403: { description: "Exclusivo do MASTER" } },
+        },
+      },
+      "/master/municipalities": {
+        get: {
+          tags: ["Master"], summary: "Lista as prefeituras cadastradas", security: bearer,
+          responses: { 200: { description: "Prefeituras cadastradas" }, 401: { description: "Sessão inválida" }, 403: { description: "Exclusivo do MASTER" } },
+        },
+        post: {
+          tags: ["Master"], summary: "Cadastra uma prefeitura pelo CEP", security: bearer,
+          description: "Exclusivo do MASTER. O CEP identifica cidade e UF. A rota também completa os dados de prefeituras antigas cadastradas apenas com cidade e UF.",
+          requestBody: jsonBody({
+            name: { type: "string", minLength: 2, maxLength: 150, example: "Prefeitura Municipal de Salesópolis" },
+            address: { type: "string", minLength: 1, maxLength: 255 },
+            cep: { type: "string", pattern: "^[0-9]{5}-?[0-9]{3}$" },
+            cnpj: { type: "string", description: "CNPJ com ou sem pontuação" },
+          }),
+          responses: {
+            200: { description: "Cadastro existente completado com o mesmo ID" },
+            201: { description: "Prefeitura cadastrada", content: { "application/json": { schema: {
+              type: "object", required: ["id", "city", "state", "name", "address", "cep", "cnpj"], properties: {
+                id: uuid, city: { type: "string" }, state: { type: "string" }, name: { type: "string" },
+                address: { type: "string" }, cep: { type: "string" }, cnpj: { type: "string" },
+              },
+            } } } },
+            400: { description: "Dados inválidos ou CEP inexistente" }, 401: { description: "Sessão inválida" },
+            403: { description: "Exclusivo do MASTER" }, 409: { description: "Município ou CNPJ já cadastrado" },
+            503: { description: "Consulta de CEP indisponível" },
+          },
+        },
+      },
       "/master/dashboard": {
         get: {
           tags: ["MASTER"],
@@ -664,7 +691,7 @@ export const swaggerSpec = swaggerJSDoc({
       "/auth/register/user": {
         post: {
           tags: ["Auth"],
-          summary: "Cadastra um usuario comum",
+          summary: "Cadastra um munícipe e o vincula à prefeitura pelo CEP",
           requestBody: {
             required: true,
             content: {
@@ -696,6 +723,7 @@ export const swaggerSpec = swaggerJSDoc({
                 },
               },
             },
+            404: { description: "Prefeitura não cadastrada para o CEP informado" },
             409: {
               description: "E-mail ou CPF já cadastrado",
               content: {
@@ -758,6 +786,7 @@ export const swaggerSpec = swaggerJSDoc({
                 },
               },
             },
+            404: { description: "Prefeitura não cadastrada para o CEP informado" },
             409: {
               description: "E-mail ou CPF já cadastrado",
               content: {
@@ -871,7 +900,13 @@ export const swaggerSpec = swaggerJSDoc({
               content: {
                 "application/json": {
                   schema: {
-                    $ref: "#/components/schemas/AuthResponse",
+                    oneOf: [
+                      { $ref: "#/components/schemas/AuthResponse" },
+                      { type: "object", required: ["firstLogin", "firstLoginToken"], properties: {
+                        firstLogin: { type: "boolean", enum: [true] },
+                        firstLoginToken: { type: "string", description: "Token de primeiro acesso válido por 15 minutos" },
+                      } },
+                    ],
                   },
                 },
               },
@@ -1153,6 +1188,32 @@ export const swaggerSpec = swaggerJSDoc({
           },
         },
       },
+      "/auth/first-login/terms": {
+        get: {
+          tags: ["Auth"], summary: "Consulta os termos vigentes para o primeiro acesso", security: bearer,
+          description: "Use firstLoginToken como Bearer. Exiba o texto e use documentId para registrar o aceite.",
+          responses: { 200: { description: "Termo vigente para operadores" }, 401: { description: "Token inválido ou expirado" },
+            409: { description: "Nenhum termo vigente para operadores" } },
+        },
+      },
+      "/auth/first-login": {
+        post: {
+          tags: ["Auth"], summary: "Troca a senha inicial e registra o aceite dos termos", security: bearer,
+          description: "Use firstLoginToken como Bearer. A conclusão libera uma sessão normal.",
+          requestBody: jsonBody({
+            password: { type: "string", minLength: 8, description: "Nova senha de até 72 bytes, diferente do CPF" },
+            passwordConfirmation: { type: "string", minLength: 8 },
+            termDocumentId: uuid,
+            termsAccepted: { type: "boolean", enum: [true], description: "O operador leu e aceitou os termos de uso." },
+          }),
+          responses: {
+            200: { description: "Primeiro acesso concluído", content: { "application/json": { schema: { $ref: "#/components/schemas/AuthResponse" } } } },
+            400: { description: "Dados inválidos ou senha igual ao CPF ou à senha atual" },
+            401: { description: "Token inválido, expirado ou já utilizado" },
+            409: { description: "Termo indisponível ou desatualizado, ou primeiro acesso concluído em outra solicitação" },
+          },
+        },
+      },
       "/auth/register/cooperative": {
         post: {
           tags: ["Auth"], summary: "MASTER envia convite para uma cooperativa vinculada ao município do CEP", security: [{ bearerAuth: [] }],
@@ -1168,6 +1229,24 @@ export const swaggerSpec = swaggerJSDoc({
           parameters: [{ name: "Idempotency-Key", in: "header", required: true, schema: { type: "string", maxLength: 128 } }],
           requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/MunicipalCreditInput" } } } },
           responses: { 201: { description: "Crédito registrado com protocolo, nome completo do munícipe e saldo atualizado" }, 400: { description: "Dados inválidos" }, 403: { description: "Perfil sem acesso" }, 404: { description: "Munícipe não encontrado" }, 409: { description: "Conflito de saldo, concorrência ou chave" } },
+        },
+      },
+      "/account/profile": {
+        get: { tags: ["Conta"], summary: "Consulta o perfil da conta", security: bearer,
+          responses: { 200: { description: "Perfil e endereço atuais, com municipalityId para contas vinculadas" }, 401: { description: "Sessão inválida" } },
+        },
+        patch: { tags: ["Conta"], summary: "Atualiza o endereço da conta", security: bearer,
+          description: "Envie ao menos um campo de endereço. A cidade e a UF são atualizadas a partir do CEP. O vínculo com a prefeitura é mantido.",
+          requestBody: { required: true, content: { "application/json": { schema: {
+            type: "object", minProperties: 1, additionalProperties: false,
+            properties: {
+              cep: { type: "string", pattern: "^[0-9]{5}-?[0-9]{3}$" },
+              address: { type: "string", minLength: 1, maxLength: 255 },
+              addressNumber: { type: "string", nullable: true, minLength: 1, maxLength: 30 },
+            },
+          } } } },
+          responses: { 200: { description: "Perfil com endereço atualizado" }, 400: { description: "Endereço inválido" },
+            401: { description: "Sessão inválida" }, 503: { description: "Consulta de CEP indisponível" } },
         },
       },
       "/auth/logout": {
@@ -1213,6 +1292,22 @@ export const swaggerSpec = swaggerJSDoc({
       "/residents/pre-registrations/{id}": {
         delete: { ...residents, summary: "Exclui um pré-cadastro pendente como MASTER", parameters: [pathId()],
           responses: { 204: { description: "Pré-cadastro excluído" }, 403: { description: "Rota exclusiva do MASTER" }, 404: { description: "Pré-cadastro pendente não encontrado" } },
+        },
+      },
+      "/residents/{id}": {
+        delete: {
+          ...residents,
+          summary: "Exclui os dados pessoais de um munícipe",
+          description: "Exclusivo do vendedor da mesma prefeitura. Após concluir a exclusão, a API envia uma confirmação ao e-mail do munícipe e informa se o provedor aceitou o envio.",
+          parameters: [pathId()],
+          responses: {
+            200: { description: "Dados excluídos", content: { "application/json": { schema: {
+              type: "object", required: ["deleted", "emailSent"],
+              properties: { deleted: { type: "boolean", enum: [true] }, emailSent: { type: "boolean" } },
+            } } } },
+            400: { description: "ID inválido" }, 401: { description: "Sessão inválida" },
+            403: { description: "Exclusivo de PrefeituraVendedor" }, 404: { description: "Munícipe não encontrado nesta prefeitura" },
+          },
         },
       },
       "/residents/lookup": {
@@ -1267,6 +1362,12 @@ export const swaggerSpec = swaggerJSDoc({
         patch: { ...seller, summary: "Atualiza a quantidade em estoque", parameters: [pathId()],
           requestBody: jsonBody({ expectedQuantity: quantity, quantity }),
           responses: { 200: { description: "Produto atualizado" }, 404: { description: "Produto não encontrado" }, 409: { description: "Quantidade atual diverge da informada" } },
+        },
+      },
+      "/store/admin/products/{id}/status": {
+        patch: { ...seller, summary: "Ativa ou desativa um produto", parameters: [pathId()],
+          requestBody: jsonBody({ active: { type: "boolean" } }),
+          responses: { 204: { description: "Status atualizado" }, 400: { description: "Dados inválidos" }, 404: { description: "Produto não encontrado no município" } },
         },
       },
       "/store/admin/carts": {

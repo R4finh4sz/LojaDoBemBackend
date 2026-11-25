@@ -23,16 +23,13 @@ type OrderLine = {
 export async function getMunicipalDashboard(sellerId: string) {
   return prisma.$transaction(async (tx) => {
     const municipality = await sellerMunicipality(sellerId, tx);
-    const uppercaseAccents = "ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑÝŸ";
-    const lowercaseAccents = "áàâãäéèêëíìîïóòôõöúùûüçñýÿ";
     const collected = Prisma.sql`
       SELECT COALESCE(r."cartId", r.id) AS "orderId", r."userId", r."productId",
              r.quantity, r."totalPrice", COALESCE(r."completedAt", r."updatedAt") AS "collectedAt",
              p.name AS "productName"
       FROM redemptions r JOIN products p ON p.id = r."productId"
       WHERE r.status = 'COMPLETED'
-        AND lower(translate(normalize(p.city), ${uppercaseAccents}, ${lowercaseAccents})) = ${municipality.city}
-        AND lower(p.state) = lower(${municipality.state})
+        AND p."municipalityId" = ${municipality.id}
     `;
 
     const [totals] = await tx.$queryRaw<DashboardTotals[]>`

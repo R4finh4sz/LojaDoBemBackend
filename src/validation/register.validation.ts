@@ -74,11 +74,13 @@ export const registerFields = z.object({
   city: z
     .string({ required_error: REQUIRED_FIELD_MESSAGE })
     .transform(normalizeText)
-    .pipe(z.string().min(2, "Cidade obrigatória").max(100, "Cidade muito longa")),
+    .pipe(z.string().min(2, "Cidade inválida").max(100, "Cidade muito longa"))
+    .optional(),
   state: z
     .string({ required_error: REQUIRED_FIELD_MESSAGE })
     .transform(normalizeText)
-    .pipe(z.string().min(2, "Estado obrigatório").max(50, "Estado muito longo")),
+    .pipe(z.string().min(2, "Estado inválido").max(50, "Estado muito longo"))
+    .optional(),
   profilePhoto: z
     .string()
     .trim()
