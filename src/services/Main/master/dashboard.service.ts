@@ -42,6 +42,7 @@ export async function getMasterDashboard() {
       take: activityLimit,
     }),
     prisma.securityEvent.findMany({
+      where: { kind: { in: ["RATE_LIMIT_BLOCK", "TWO_FACTOR_BLOCK"] } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: { id: true, kind: true, createdAt: true, blockedUntil: true },
       take: activityLimit,

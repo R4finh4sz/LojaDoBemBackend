@@ -17,6 +17,11 @@ enum Role {
 enum SecurityEventKind {
   RATE_LIMIT_BLOCK
   TWO_FACTOR_BLOCK
+  LOGIN_SUCCESS
+  LOGIN_FAILURE
+  TWO_FACTOR_REQUIRED
+  TWO_FACTOR_SUCCESS
+  TWO_FACTOR_FAILURE
 }
 
 model MasterIdentity {
@@ -30,7 +35,7 @@ model SecurityEvent {
   id          String            @id @default(uuid())
   kind        SecurityEventKind
   clientKey   String?
-  blockedUntil DateTime
+  blockedUntil DateTime?
   createdAt   DateTime          @default(now())
 
   @@index([kind, createdAt])
