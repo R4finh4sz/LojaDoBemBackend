@@ -8,7 +8,7 @@ Copie `.env.example` para `.env`, ajuste `DATABASE_URL` e informe dois segredos 
 node -p "require('node:crypto').randomBytes(32).toString('base64')"
 ```
 
-Preencha as variáveis `BREVO_*` para os fluxos que enviam e-mail, incluindo login com 2FA. A configuração `SESSION_LOCATION_PROXY_SECRET` é opcional e serve para registrar cidade e região a partir de um proxy confiável.
+Preencha `RESEND_API_KEY` e `RESEND_SENDER_EMAIL` para os fluxos que enviam e-mail, incluindo login com 2FA. O remetente deve estar autorizado na conta do Resend. A configuração `SESSION_LOCATION_PROXY_SECRET` é opcional e serve para registrar cidade e região a partir de um proxy confiável.
 
 ```sh
 yarn install
