@@ -2,9 +2,10 @@ import crypto from "crypto";
 import { securityConfig } from "@/config/env";
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/services/Auth/email/email.service";
+import { issueFirstLoginToken } from "@/services/Auth/first-login/first-login.service";
 import { issueSessionToken } from "@/services/Auth/session/session.service";
 import type { SessionMetadata } from "@/services/Auth/session/session-metadata";
-import { AuthResult, VerifyTwoFactorInput } from "@/types/auth.types";
+import { VerifyTwoFactorInput, VerifyTwoFactorResult } from "@/types/auth.types";
 import { TwoFactorChallengeNotFoundError } from "./TwoFactorChallengeNotFoundError";
 import { TwoFactorChallengeExpiredError } from "./TwoFactorChallengeExpiredError";
 import { TwoFactorChallengeBlockedError } from "./TwoFactorChallengeBlockedError";
@@ -107,13 +108,14 @@ export async function verifyTwoFactorChallenge(challengeId: string, code: string
           id: true,
           role: true,
           active: true,
+          firstLogin: true,
           twoFactorEnabled: true,
         },
       },
     },
   });
 
-  if (!challenge || challenge.consumedAt || !challenge.user.twoFactorEnabled) {
+  if (!challenge || challenge.consumedAt || (!challenge.user.twoFactorEnabled && !challenge.user.firstLogin)) {
     throw new TwoFactorChallengeNotFoundError("Desafio 2FA não encontrado");
   }
 
@@ -147,7 +149,11 @@ export async function verifyTwoFactorChallenge(challengeId: string, code: string
   }
 
   const consumed = await prisma.twoFactorChallenge.updateMany({
-    where: { id: challenge.id, consumedAt: null, expiresAt: { gt: new Date() }, attempts: { lt: securityConfig.twoFactorMaxAttempts }, user: { twoFactorEnabled: true } },
+    where: {
+      id: challenge.id, consumedAt: null, expiresAt: { gt: new Date() },
+      attempts: { lt: securityConfig.twoFactorMaxAttempts },
+      user: { firstLogin: challenge.user.firstLogin, ...(challenge.user.firstLogin ? {} : { twoFactorEnabled: true }) },
+    },
     data: {
       consumedAt: new Date(),
     },
@@ -157,12 +163,13 @@ export async function verifyTwoFactorChallenge(challengeId: string, code: string
   return challenge.user;
 }
 
-export async function verifyTwoFactor({ challengeId, code }: VerifyTwoFactorInput, metadata?: SessionMetadata): Promise<AuthResult> {
+export async function verifyTwoFactor({ challengeId, code }: VerifyTwoFactorInput, metadata?: SessionMetadata): Promise<VerifyTwoFactorResult> {
   const user = await verifyTwoFactorChallenge(challengeId, code);
 
   if (!user.active) {
     throw new TwoFactorInactiveUserError("Usuário desativado");
   }
 
+  if (user.firstLogin) return { firstLogin: true, firstLoginToken: issueFirstLoginToken(user.id) };
   return issueSessionToken(user, metadata);
 }
