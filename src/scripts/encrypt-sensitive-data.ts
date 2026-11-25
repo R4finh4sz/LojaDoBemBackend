@@ -18,11 +18,19 @@ async function main() {
       data: {
         name: encryptSensitiveData(decryptSensitiveData(user.name)),
         cpf: encryptSensitiveData(cpf),
-        cpfHash: createSearchHash(cpf),
+        cpfHash: cpf ? createSearchHash(cpf) : null,
         birthDate: encryptSensitiveData(decryptSensitiveData(user.birthDate)),
         phone: encryptSensitiveData(decryptSensitiveData(user.phone)),
         cep: encryptSensitiveData(decryptSensitiveData(user.cep)),
         address: encryptSensitiveData(decryptSensitiveData(user.address)),
+        addressNumber: user.addressNumber
+          ? encryptSensitiveData(decryptSensitiveData(user.addressNumber))
+          : null,
+        authorizationPdf: user.authorizationPdf
+          ? encryptSensitiveData(decryptSensitiveData(user.authorizationPdf))
+          : null,
+        cnpj: user.cnpj ? encryptSensitiveData(decryptSensitiveData(user.cnpj)) : null,
+        jobTitle: user.jobTitle ? encryptSensitiveData(decryptSensitiveData(user.jobTitle)) : null,
         city: encryptSensitiveData(decryptSensitiveData(user.city)),
         state: encryptSensitiveData(decryptSensitiveData(user.state)),
         profilePhoto: user.profilePhoto

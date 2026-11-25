@@ -24,6 +24,8 @@ export { InvalidPasswordResetCodeError } from "./InvalidPasswordResetCodeError";
 export { InvalidPasswordResetTokenError } from "./InvalidPasswordResetTokenError";
 
 const CODE_LIMIT = 1_000_000;
+const PASSWORD_CODE_SEND_LIMIT = 3;
+const PASSWORD_CODE_SEND_WINDOW_MS = 3_600_000;
 
 type PasswordChangeSession = { userId: string; sessionId: string };
 export class PasswordChangeUnavailableError extends Error {}
@@ -83,20 +85,54 @@ async function requestPasswordChallenge(where: Prisma.UserWhereUniqueInput, sess
   const code = crypto.randomInt(0, CODE_LIMIT).toString().padStart(6, "0");
   const codeSalt = crypto.randomBytes(32).toString("hex");
 
-  const [_, challenge] = await prisma.$transaction([
-    prisma.passwordResetChallenge.updateMany({
-      where: { userId: user.id, ...challengeScope(session), consumedAt: null },
-      data: { consumedAt: new Date() },
-    }),
-    prisma.passwordResetChallenge.create({
-      data: {
-        userId: user.id, sessionId: session?.sessionId,
-        codeHash: digest(code, codeSalt), codeSalt,
-        expiresAt: addMinutes(securityConfig.passwordResetCodeExpiresMinutes),
-      },
-      select: { id: true, expiresAt: true },
-    }),
-  ], { isolationLevel: "Serializable" });
+  let challenge: { id: string; expiresAt: Date };
+  for (let attempt = 1; ; attempt++) {
+    try {
+      challenge = await prisma.$transaction(async (tx) => {
+        const now = new Date();
+        const recentChallenges = await tx.passwordResetChallenge.findMany({
+          where: {
+            userId: user.id,
+            createdAt: { gt: new Date(now.getTime() - PASSWORD_CODE_SEND_WINDOW_MS) },
+          },
+          orderBy: { createdAt: "desc" },
+          take: PASSWORD_CODE_SEND_LIMIT,
+          select: { createdAt: true },
+        });
+        if (recentChallenges.length === PASSWORD_CODE_SEND_LIMIT) {
+          const oldest = recentChallenges[PASSWORD_CODE_SEND_LIMIT - 1];
+          throw new PasswordResetBlockedError(
+            "Limite de três envios de código por hora atingido.",
+            new Date(oldest.createdAt.getTime() + PASSWORD_CODE_SEND_WINDOW_MS),
+          );
+        }
+
+        await tx.passwordResetChallenge.updateMany({
+          where: { userId: user.id, ...challengeScope(session), consumedAt: null },
+          data: { consumedAt: now },
+        });
+        return tx.passwordResetChallenge.create({
+          data: {
+            userId: user.id, sessionId: session?.sessionId,
+            codeHash: digest(code, codeSalt), codeSalt,
+            expiresAt: addMinutes(securityConfig.passwordResetCodeExpiresMinutes),
+          },
+          select: { id: true, expiresAt: true },
+        });
+      }, { isolationLevel: "Serializable" });
+      break;
+    } catch (error) {
+      if (error instanceof PasswordResetBlockedError && !session) {
+        return {
+          challengeId: crypto.randomUUID(),
+          expiresAt: addMinutes(securityConfig.passwordResetCodeExpiresMinutes),
+        };
+      }
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2034" || attempt === 3) {
+        throw error;
+      }
+    }
+  }
 
   try {
     await sendEmail({
