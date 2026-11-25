@@ -104,13 +104,23 @@ export const registerFields = z.object({
     .max(128, "Confirmação de senha muito longa"),
 });
 
-export const registerSchema = registerFields.refine((data) => data.password === data.passwordConfirmation, {
+const passwordConfirmationError = {
   message: "Senhas não conferem",
   path: ["passwordConfirmation"],
-});
+};
 
-export const registerOperatorSchema = registerFields.omit({
-  password: true,
-  passwordConfirmation: true,
-  termsAccepted: true,
-});
+export const registerSchema = registerFields.refine(
+  (data) => data.password === data.passwordConfirmation,
+  passwordConfirmationError,
+);
+
+export const registerOperatorSchema = registerFields
+  .omit({ termsAccepted: true, password: true, passwordConfirmation: true });
+
+export const operatorInvitationPasswordSchema = registerFields
+  .pick({ password: true, passwordConfirmation: true })
+  .refine((data) => Buffer.byteLength(data.password, "utf8") <= 72, {
+    message: "A senha deve ter até 72 bytes em UTF-8",
+    path: ["password"],
+  })
+  .refine((data) => data.password === data.passwordConfirmation, passwordConfirmationError);

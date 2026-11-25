@@ -140,9 +140,9 @@ export async function getTermByDocumentId(documentId: string): Promise<TermEntit
   return term;
 }
 
-export async function getCurrentTermByRole(role: Role, tx: Prisma.TransactionClient = prisma): Promise<TermEntity> {
+export async function getCurrentTermByRole(role: Role, db: Prisma.TransactionClient = prisma): Promise<TermEntity> {
   const type = termTypeForRole(role);
-  const term = await tx.term.findFirst({
+  const term = await db.term.findFirst({
     where: {
       type,
       active: true,

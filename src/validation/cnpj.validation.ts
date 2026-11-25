@@ -8,4 +8,4 @@ export const cnpjSchema = z.string().transform((value) => value.replace(/[^a-z0-
   };
   return digit(value, [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(value[12]) &&
     digit(value, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(value[13]);
-});
+}, "CNPJ inválido");

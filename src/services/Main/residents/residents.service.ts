@@ -77,11 +77,12 @@ export async function createResident(actorId: string, input: {
 
 export async function findResident(tx: Prisma.TransactionClient, actorId: string, cpf: string) {
   const actor = await tx.user.findUniqueOrThrow({ where: { id: actorId } });
-  const user = await tx.user.findUnique({ where: { cpfHash: createSearchHash(cpf) }, include: { municipalWallet: true } });
-  const accessible = user && actor.active && (actor.role === Role.MASTER
-    ? user.pendingActivation
-    : (actor.role === Role.PrefeituraVendedor || actor.role === Role.COOPERATIVA) &&
-      actor.municipalityId !== null && actor.municipalityId === user.municipalityId);
+  const user = await tx.user.findUnique({ where: { cpfHash: createSearchHash(cpf) } });
+  const municipalOperator = actor.role === Role.COOPERATIVA || actor.role === Role.PrefeituraVendedor;
+  const accessible = user && actor.active && !actor.deletedAt && (
+    actor.role === Role.MASTER ||
+    (municipalOperator && sameLocation(decryptedLocation(actor), decryptedLocation(user)))
+  );
   if (!user || !accessible || user.role !== Role.USER || user.deletedAt || (!user.active && !user.pendingActivation)) {
     throw new StoreError("Munícipe não encontrado", 404);
   }

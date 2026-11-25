@@ -18,9 +18,11 @@ Navegador e dispositivo são reconhecidos pelo User-Agent da requisição que ef
 
 Importe `LojaDoBem.atendimento-municipal.postman_collection.json` e configure `baseUrl` e os tokens locais. O cadastro de operadores exige um token do `MASTER` e valida cidade e UF pelo CEP. O cadastro de vendedor também exige CNPJ.
 
+Publique um termo administrativo vigente antes de convidar vendedores ou cooperativas. As rotas de cadastro enviam um convite por e-mail e respondem com HTTP `202`. A conta só é criada quando o operador aceita o termo e define uma senha pelo link, que expira em 24 horas. Configure `PUBLIC_API_URL` com a URL da API que o destinatário consegue acessar.
+
 Para pré-cadastrar um munícipe com `sellerToken`, envie `termsAccepted: true` e preencha `authorizationDocument` com o termo assinado em JPG, PNG ou PDF de até 2 MiB, em Base64 puro.
 
-O crédito usa `POST /residents/credits` com token da `COOPERATIVA`. Envie uma chave distinta no cabeçalho `Idempotency-Key` para cada operação e reutilize a chave ao reenviar o mesmo pedido. Compras no app também aceitam esse cabeçalho.
+O crédito usa `POST /residents/credits` com token de `COOPERATIVA`, `PrefeituraVendedor` ou `MASTER`. Cooperativas e vendedores podem creditar no próprio município. O MASTER pode creditar em qualquer município. Envie uma chave distinta no cabeçalho `Idempotency-Key` para cada operação e reutilize a chave ao reenviar o mesmo pedido. Compras no app também aceitam esse cabeçalho.
 
 Para testar a ativação, copie o `challengeId` retornado pela primeira requisição, confirme o código enviado ao e-mail do pré-cadastro e use o `activationToken` retornado para concluir a ativação.
 

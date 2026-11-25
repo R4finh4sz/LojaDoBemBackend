@@ -8,9 +8,7 @@ Copie `.env.example` para `.env`, ajuste `DATABASE_URL` e informe dois segredos 
 node -p "require('node:crypto').randomBytes(32).toString('base64')"
 ```
 
-Configure `RESEND_API_KEY` e `RESEND_SENDER_EMAIL` para enviar e-mails de login com 2FA, recuperação e alteração de senha e ativação de conta. Use um endereço de um domínio verificado no Resend. O nome do remetente é definido por `RESEND_SENDER_NAME` e o padrão é `ReciclaOnline`. [Documentação de envio do Resend](https://resend.com/docs/api-reference/emails/send-email)
-
-A configuração `SESSION_LOCATION_PROXY_SECRET` é opcional e serve para registrar cidade e região a partir de um proxy confiável.
+Preencha `RESEND_API_KEY` e `RESEND_SENDER_EMAIL` para os fluxos que enviam e-mail, incluindo login com 2FA. O remetente deve estar autorizado na conta do Resend. A configuração `SESSION_LOCATION_PROXY_SECRET` é opcional e serve para registrar cidade e região a partir de um proxy confiável.
 
 ```sh
 yarn install

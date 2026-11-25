@@ -17,8 +17,8 @@ function normalizeText(value: string) {
   return value.trim().toLowerCase();
 }
 
-export async function ensureAvailableIdentity(cpf: string, email: string, cpfHash: string, emailHash: string) {
-  const existing = await prisma.user.findFirst({
+export async function ensureAvailableIdentity(cpf: string, email: string, cpfHash: string, emailHash: string, db: Prisma.TransactionClient = prisma) {
+  const existing = await db.user.findFirst({
     where: {
       OR: [{ cpfHash }, { emailHash }, { cpfHash: null, cpf }, { emailHash: null, email: { equals: email, mode: "insensitive" } }],
     },
@@ -39,8 +39,11 @@ export async function createUserWithRole(
     state,
     profilePhoto,
     email,
-  }: Omit<RegisterInput, "termsAccepted" | "password" | "passwordConfirmation">,
-  registration: Registration,
+    password,
+  }: Omit<RegisterInput, "passwordConfirmation" | "termsAccepted"> & { termsAccepted: boolean },
+  role: Role,
+  cnpj?: string,
+  options?: { db: Prisma.TransactionClient; id: string; termId: string },
 ): Promise<RegisterResult> {
   const { role } = registration;
   const firstLogin = role !== Role.USER;
@@ -49,7 +52,8 @@ export async function createUserWithRole(
   const emailHash = createSearchHash(normalizedEmail);
   const cpfHash = createSearchHash(normalizedCpf);
 
-  await ensureAvailableIdentity(normalizedCpf, normalizedEmail, cpfHash, emailHash);
+  const db = options?.db ?? prisma;
+  await ensureAvailableIdentity(normalizedCpf, normalizedEmail, cpfHash, emailHash, db);
 
   const location = normalizeMunicipality(await resolveMunicipality(cep));
   if (!sameLocation({ city: city ?? location.city, state: state ?? location.state }, location)) {
@@ -61,36 +65,32 @@ export async function createUserWithRole(
   const hashedPassword = await hashPassword(registration.role === Role.USER ? registration.password : normalizedCpf);
 
   try {
-    const user = await prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: {
-          name: encryptSensitiveData(normalizeText(name)),
-          cpf: encryptSensitiveData(normalizedCpf),
-          cpfHash,
-          birthDate: encryptSensitiveData(birthDate.toISOString()),
-          phone: encryptSensitiveData(phone.replace(/\D/g, "")),
-          cep: encryptSensitiveData(cep.replace(/\D/g, "")),
-          address: encryptSensitiveData(normalizeText(address)),
-          city: encryptSensitiveData(location.city),
-          state: encryptSensitiveData(location.state),
-          profilePhoto: profilePhoto ? encryptSensitiveData(normalizeText(profilePhoto)) : null,
-          firstLogin,
-          termsAccepted: !firstLogin,
-          email: encryptSensitiveData(normalizedEmail),
-          emailHash,
-          password: hashedPassword,
-          role,
-          municipalityId: municipality.id,
-          cnpj: "cnpj" in registration && registration.cnpj ? encryptSensitiveData(registration.cnpj) : undefined,
-        },
-        select: {
-          id: true,
-        },
-      });
-      if (role === Role.USER) {
-        await tx.municipalWallet.create({ data: { userId: user.id, municipalityId: municipality.id } });
-      }
-      return user;
+    const user = await db.user.create({
+      data: {
+        ...(options && {
+          id: options.id,
+          termAccepts: { create: { termId: options.termId, accepted: true } },
+        }),
+        name: encryptSensitiveData(normalizeText(name)),
+        cpf: encryptSensitiveData(normalizedCpf),
+        cpfHash,
+        birthDate: encryptSensitiveData(birthDate.toISOString()),
+        phone: encryptSensitiveData(phone.replace(/\D/g, "")),
+        cep: encryptSensitiveData(cep.replace(/\D/g, "")),
+        address: encryptSensitiveData(normalizeText(address)),
+        city: encryptSensitiveData(normalizeText(city)),
+        state: encryptSensitiveData(normalizeText(state)),
+        profilePhoto: profilePhoto ? encryptSensitiveData(normalizeText(profilePhoto)) : null,
+        termsAccepted,
+        email: encryptSensitiveData(normalizedEmail),
+        emailHash,
+        password: hashedPassword,
+        role,
+        cnpj: cnpj ? encryptSensitiveData(cnpj) : undefined,
+      },
+      select: {
+        id: true,
+      },
     });
 
     return {

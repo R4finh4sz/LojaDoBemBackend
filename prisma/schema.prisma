@@ -141,6 +141,18 @@ model User {
   @@map("users")
 }
 
+model Municipality {
+  id      String @id @default(uuid())
+  name    String
+  address String
+  cep     String
+  cnpj    String @unique
+  city    String
+  state   String
+
+  @@map("municipalities")
+}
+
 model Product {
   id             String          @id @default(uuid())
   adminId        String?

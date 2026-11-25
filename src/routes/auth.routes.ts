@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, urlencoded } from "express";
 import { Role } from "@prisma/client";
 import { loginController } from "@/controllers/Auth/login/login.controller";
 import { completeFirstLoginController, firstLoginTermController } from "@/controllers/Auth/first-login/first-login.controller";
@@ -11,6 +11,7 @@ import {
 } from "@/controllers/Auth/forgot-password/forgot-password.controller";
 import { registerOperatorController } from "@/controllers/Main/register/register-admin.controller";
 import { registerUserController } from "@/controllers/Auth/register/register-user.controller";
+import { getOperatorInvitation, postOperatorInvitation } from "@/controllers/Auth/register/operator-invitation.controller";
 import { authMiddleware, requireRole } from "@/middlewares/auth.middleware";
 
 const router = Router();
@@ -18,6 +19,8 @@ const router = Router();
 router.post("/register/user", registerUserController);
 router.post("/register/admin", authMiddleware, requireRole(Role.MASTER), registerOperatorController(Role.PrefeituraVendedor));
 router.post("/register/cooperative", authMiddleware, requireRole(Role.MASTER), registerOperatorController(Role.COOPERATIVA));
+router.get("/register/operator-invitation", getOperatorInvitation);
+router.post("/register/operator-invitation", urlencoded({ extended: false, limit: "16kb" }), postOperatorInvitation);
 router.post("/login", loginController);
 router.post("/2fa/verify", verifyTwoFactorController);
 router.get("/first-login/terms", firstLoginTermController);

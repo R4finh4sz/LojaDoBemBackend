@@ -1,5 +1,5 @@
 import PDFDocument from "pdfkit";
-import { Role } from "@prisma/client";
+import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decryptSensitiveData } from "@/services/Auth/data-protection/data-protection.service";
 import { verifyPassword } from "@/services/Auth/password/password.service";
@@ -26,27 +26,10 @@ export async function deleteAccount(userId: string, password: string) {
   return user.role;
 }
 
-export async function eraseAccount(
-  userId: string,
-  pendingOnly: boolean | undefined,
-  passwordHash?: string,
-  municipalSellerId?: string,
-  operatorRole?: typeof Role.PrefeituraVendedor | typeof Role.COOPERATIVA,
-) {
-  if (pendingOnly === undefined && !municipalSellerId) throw new AccountError("Vendedor vinculado à exclusão é obrigatório", 403);
-  return auditedOperation(async (tx) => {
-    const where = {
-      id: userId, deletedAt: null, pendingActivation: pendingOnly, password: passwordHash, role: operatorRole,
-      ...(municipalSellerId && {
-        role: Role.USER,
-        municipality: { users: { some: { id: municipalSellerId, role: Role.PrefeituraVendedor, active: true, deletedAt: null } } },
-      }),
-    };
-    const recipient = pendingOnly === undefined && municipalSellerId
-      ? await tx.user.findFirst({ where, select: { email: true } })
-      : null;
+export async function eraseAccount(userId: string, pendingOnly: boolean, passwordHash?: string, role?: Role) {
+  await auditedOperation(async (tx) => {
     const claimed = await tx.user.updateMany({
-      where,
+      where: { id: userId, deletedAt: null, pendingActivation: pendingOnly, password: passwordHash, role },
       data: {
         deletedAt: new Date(), active: false, pendingActivation: false, termsAccepted: false,
         name: "", cpf: "", cpfHash: null, email: "", emailHash: null, birthDate: "",
