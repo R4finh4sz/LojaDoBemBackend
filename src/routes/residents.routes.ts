@@ -76,7 +76,7 @@ router.post("/lookup", requireRole(Role.PrefeituraVendedor, Role.MASTER), handle
   const user = await findResident(prisma, req.user!.id, z.object({ cpf }).parse(req.body).cpf);
   return { id: user.id, ecoCoinBalance: user.ecoCoinBalance, pendingActivation: user.pendingActivation };
 }));
-router.post("/credits", requireRole(Role.COOPERATIVA), handle(async (req) => {
+router.post("/credits", requireRole(Role.COOPERATIVA, Role.PrefeituraVendedor, Role.MASTER), handle(async (req) => {
   const input = z.object({ cpf, amount: z.string().regex(/^\d{1,10}(\.\d{1,2})?$/).refine((amount) => Number(amount) > 0) }).parse(req.body);
   return creditResident(req.user!.id, input.cpf, input.amount, requestKey(req));
 }, 201));

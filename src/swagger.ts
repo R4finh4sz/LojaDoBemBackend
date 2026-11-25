@@ -13,6 +13,24 @@ const pathId = (name = "id") => ({ name, in: "path", required: true, schema: uui
 const seller = { tags: ["Administração da Loja"], security: bearer, description: "Exclusivo de PrefeituraVendedor. A operação fica restrita ao município do vendedor." };
 const residents = { tags: ["Atendimento municipal"], security: bearer };
 const activation = { tags: ["Ativação de conta"] };
+const operatorProperties = {
+  name: { type: "string" },
+  cpf,
+  birthDate: { type: "string", format: "date" },
+  phone: { type: "string" },
+  cep: { type: "string" },
+  address: { type: "string" },
+  city: { type: "string" },
+  state: { type: "string" },
+  email: { type: "string", format: "email" },
+};
+const operatorBody = (vendor: boolean) => {
+  const required = vendor ? { ...operatorProperties, cnpj: { type: "string" } } : operatorProperties;
+  return jsonBody({
+    ...required,
+    profilePhoto: { type: "string" },
+  }, Object.keys(required));
+};
 
 export const swaggerSpec = swaggerJSDoc({
   definition: {
@@ -704,32 +722,12 @@ export const swaggerSpec = swaggerJSDoc({
       "/auth/register/admin": {
         post: {
           tags: ["Auth"],
-          summary: "Cadastra uma conta PrefeituraVendedor",
+          summary: "Envia convite para um vendedor",
           security: [{ bearerAuth: [] }],
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  allOf: [
-                    { $ref: "#/components/schemas/RegisterInput" },
-                    { type: "object", required: ["cnpj"], properties: { cnpj: { type: "string" } } },
-                  ],
-                },
-              },
-            },
-          },
+          description: "O convite expira em 24 horas. A conta é criada quando o operador aceita o termo vigente e define a senha pelo link enviado por e-mail.",
+          requestBody: operatorBody(true),
           responses: {
-            201: {
-              description: "Conta PrefeituraVendedor cadastrada",
-              content: {
-                "application/json": {
-                  schema: {
-                    $ref: "#/components/schemas/RegisterResponse",
-                  },
-                },
-              },
-            },
+            202: { description: "Convite enviado por e-mail" },
             400: {
               description: "Dados inválidos",
               content: {
@@ -1157,14 +1155,16 @@ export const swaggerSpec = swaggerJSDoc({
       },
       "/auth/register/cooperative": {
         post: {
-          tags: ["Auth"], summary: "MASTER cadastra uma cooperativa vinculada ao município do CEP", security: [{ bearerAuth: [] }],
-          requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/RegisterInput" } } } },
-          responses: { 201: { description: "Cooperativa cadastrada" }, 400: { description: "Dados inválidos" }, 403: { description: "Perfil sem acesso" }, 409: { description: "Cadastro duplicado" } },
+          tags: ["Auth"], summary: "MASTER envia convite para uma cooperativa vinculada ao município do CEP", security: [{ bearerAuth: [] }],
+          description: "O convite expira em 24 horas. A conta é criada quando o operador aceita o termo vigente e define a senha pelo link enviado por e-mail.",
+          requestBody: operatorBody(false),
+          responses: { 202: { description: "Convite enviado por e-mail" }, 400: { description: "Dados inválidos" }, 403: { description: "Perfil sem acesso" }, 409: { description: "Cadastro duplicado ou termo indisponível" }, 502: { description: "Falha ao enviar convite" } },
         },
       },
       "/residents/credits": {
         post: {
-          tags: ["EcoCoin"], summary: "Cooperativa credita EcoCoins a um munícipe da mesma cidade", security: [{ bearerAuth: [] }],
+          tags: ["EcoCoin"], summary: "Cooperativa, vendedor ou MASTER credita EcoCoins a um munícipe", security: [{ bearerAuth: [] }],
+          description: "Cooperativas e vendedores podem creditar no próprio município. MASTER pode creditar em qualquer município.",
           parameters: [{ name: "Idempotency-Key", in: "header", required: true, schema: { type: "string", maxLength: 128 } }],
           requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/MunicipalCreditInput" } } } },
           responses: { 201: { description: "Crédito registrado com protocolo, nome completo do munícipe e saldo atualizado" }, 400: { description: "Dados inválidos" }, 403: { description: "Perfil sem acesso" }, 404: { description: "Munícipe não encontrado" }, 409: { description: "Conflito de saldo, concorrência ou chave" } },
@@ -1217,7 +1217,7 @@ export const swaggerSpec = swaggerJSDoc({
       },
       "/residents/lookup": {
         post: { ...residents, summary: "Localiza munícipe por CPF",
-          description: "PrefeituraVendedor consulta o próprio município. MASTER consulta pré-cadastros pendentes.",
+          description: "PrefeituraVendedor consulta o próprio município. MASTER consulta munícipes ativos ou com ativação pendente em qualquer município.",
           requestBody: jsonBody({ cpf }),
           responses: { 200: { description: "ID, saldo e estado de ativação do munícipe" }, 404: { description: "Munícipe não encontrado" } },
         },

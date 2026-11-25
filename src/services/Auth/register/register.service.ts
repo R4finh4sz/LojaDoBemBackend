@@ -11,8 +11,8 @@ function normalizeText(value: string) {
   return value.trim().toLowerCase();
 }
 
-export async function ensureAvailableIdentity(cpf: string, email: string, cpfHash: string, emailHash: string) {
-  const existing = await prisma.user.findFirst({
+export async function ensureAvailableIdentity(cpf: string, email: string, cpfHash: string, emailHash: string, db: Prisma.TransactionClient = prisma) {
+  const existing = await db.user.findFirst({
     where: {
       OR: [{ cpfHash }, { emailHash }, { cpfHash: null, cpf }, { emailHash: null, email: { equals: email, mode: "insensitive" } }],
     },
@@ -35,22 +35,28 @@ export async function createUserWithRole(
     termsAccepted,
     email,
     password,
-  }: RegisterInput,
+  }: Omit<RegisterInput, "passwordConfirmation" | "termsAccepted"> & { termsAccepted: boolean },
   role: Role,
-  cnpj?: string
+  cnpj?: string,
+  options?: { db: Prisma.TransactionClient; id: string; termId: string },
 ): Promise<RegisterResult> {
   const normalizedEmail = normalizeText(email);
   const normalizedCpf = cpf.replace(/\D/g, "");
   const emailHash = createSearchHash(normalizedEmail);
   const cpfHash = createSearchHash(normalizedCpf);
 
-  await ensureAvailableIdentity(normalizedCpf, normalizedEmail, cpfHash, emailHash);
+  const db = options?.db ?? prisma;
+  await ensureAvailableIdentity(normalizedCpf, normalizedEmail, cpfHash, emailHash, db);
 
   const hashedPassword = await hashPassword(password);
 
   try {
-    const user = await prisma.user.create({
+    const user = await db.user.create({
       data: {
+        ...(options && {
+          id: options.id,
+          termAccepts: { create: { termId: options.termId, accepted: true } },
+        }),
         name: encryptSensitiveData(normalizeText(name)),
         cpf: encryptSensitiveData(normalizedCpf),
         cpfHash,
