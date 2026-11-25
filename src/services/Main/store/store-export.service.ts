@@ -1,10 +1,10 @@
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
-import { municipalProducts } from "@/services/Main/residents/municipality";
 import { sellerMunicipality } from "./store.service";
 
 export async function exportMunicipalStore(sellerId: string) {
-  const scope = municipalProducts(await sellerMunicipality(sellerId));
+  const { id: municipalityId } = await sellerMunicipality(sellerId);
+  const scope = { municipalityId };
   const [products, sales] = await prisma.$transaction([
     prisma.product.findMany({
       where: scope, orderBy: [{ name: "asc" }, { id: "asc" }],

@@ -11,6 +11,7 @@ import { verifyTwoFactorSchema } from "@/validation/login.validation";
 import { sessionMetadata } from "@/services/Auth/session/session-metadata";
 
 export async function verifyTwoFactorController(req: Request, res: Response) {
+  res.setHeader("Cache-Control", "no-store");
   const parsed = verifyTwoFactorSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ message: "Dados inválidos", errors: parsed.error.flatten().fieldErrors });

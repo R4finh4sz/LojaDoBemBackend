@@ -8,6 +8,10 @@ function getRequiredEnv(name: string): string {
   return value;
 }
 
+export const corsConfig = {
+  allowedOrigin: process.env.CORS_ALLOWED_ORIGIN?.trim(),
+};
+
 export const authConfig = {
   jwtSecret: getRequiredEnv("JWT_SECRET"),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "1h",
@@ -24,13 +28,10 @@ export const masterConfig = {
   password: process.env.MASTER_PASSWORD,
 };
 
-export const brevoConfig = {
-  smtpHost: process.env.BREVO_SMTP_HOST || "smtp-relay.brevo.com",
-  smtpPort: Number(process.env.BREVO_SMTP_PORT || 587),
-  smtpUser: process.env.BREVO_SMTP_USER,
-  smtpPass: process.env.BREVO_SMTP_PASS,
-  senderEmail: process.env.BREVO_SENDER_EMAIL || process.env.BREVO_SMTP_USER,
-  senderName: process.env.BREVO_SENDER_NAME || "ReciclaOnline",
+export const resendConfig = {
+  apiKey: process.env.RESEND_API_KEY?.trim(),
+  senderEmail: process.env.RESEND_SENDER_EMAIL?.trim(),
+  senderName: process.env.RESEND_SENDER_NAME?.trim() || "ReciclaOnline",
 };
 
 export const securityConfig = {

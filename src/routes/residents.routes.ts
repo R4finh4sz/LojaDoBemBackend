@@ -5,12 +5,14 @@ import { prisma } from "@/lib/prisma";
 import { authMiddleware, requireRole } from "@/middlewares/auth.middleware";
 import { registerFields } from "@/validation/register.validation";
 import { authorizationDocument, legacyAuthorizationPdf } from "@/validation/authorization-document.validation";
-import { createSearchHash } from "@/services/Auth/data-protection/data-protection.service";
+import { createSearchHash, decryptSensitiveData } from "@/services/Auth/data-protection/data-protection.service";
 import { UserAlreadyExistsError } from "@/services/Auth/register/register.service";
-import { activateResident, confirmActivation, createResident, findResident, startActivation } from "@/services/Main/residents/residents.service";
+import { activateResident, confirmActivation, createResident, deleteMunicipalResident, findResident, startActivation } from "@/services/Main/residents/residents.service";
 import { AccountError, eraseAccount } from "@/services/Main/account/account.service";
 import { creditResident } from "@/services/Main/store/municipal-credit.service";
 import { StoreError } from "@/services/Main/store/exceptions/StoreError";
+
+import { sellerMunicipality } from "@/services/Main/store/store.service";
 
 const router = Router();
 const cpf = registerFields.shape.cpf;
@@ -68,13 +70,36 @@ router.post("/activation/complete", handle(async (req) => {
 
 router.use(authMiddleware);
 
+router.delete("/:id", requireRole(Role.PrefeituraVendedor), handle(async (req) =>
+  deleteMunicipalResident(req.user!.id, id.parse(req.params.id))));
+
 router.post("/pre-registrations", requireRole(Role.PrefeituraVendedor), handle(async (req) =>
   createResident(req.user!.id, residentFields.parse(req.body)), 201));
+router.get("/", requireRole(Role.PrefeituraVendedor), (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+}, handle(async (req) => {
+  const page = z.coerce.number().int().min(1).max(20_000_000).default(1).parse(req.query.page);
+  const { id: municipalityId } = await sellerMunicipality(req.user!.id);
+  const where = { municipalityId, role: Role.USER, deletedAt: null, OR: [{ active: true }, { pendingActivation: true }] };
+  const pageSize = 20;
+  const [total, residents] = await prisma.$transaction([
+    prisma.user.count({ where }),
+    prisma.user.findMany({
+      where, select: { id: true, name: true, pendingActivation: true }, orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: (page - 1) * pageSize, take: pageSize,
+    }),
+  ], { isolationLevel: "RepeatableRead" });
+  return {
+    residents: residents.map(({ id, name, pendingActivation }) => ({ id, name: decryptSensitiveData(name), pendingActivation })),
+    pagination: { totalPages: Math.ceil(total / pageSize) },
+  };
+}));
 router.delete("/pre-registrations/:id", requireRole(Role.MASTER), handle(async (req) =>
   eraseAccount(id.parse(req.params.id), true), 204));
 router.post("/lookup", requireRole(Role.PrefeituraVendedor, Role.MASTER), handle(async (req) => {
   const user = await findResident(prisma, req.user!.id, z.object({ cpf }).parse(req.body).cpf);
-  return { id: user.id, ecoCoinBalance: user.ecoCoinBalance, pendingActivation: user.pendingActivation };
+  return { id: user.id, ecoCoinBalance: user.municipalWallet?.balance ?? user.legacyEcoCoinBalance, pendingActivation: user.pendingActivation };
 }));
 router.post("/credits", requireRole(Role.COOPERATIVA), handle(async (req) => {
   const input = z.object({ cpf, amount: z.string().regex(/^\d{1,10}(\.\d{1,2})?$/).refine((amount) => Number(amount) > 0) }).parse(req.body);

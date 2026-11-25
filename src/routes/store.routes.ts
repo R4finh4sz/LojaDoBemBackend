@@ -9,7 +9,7 @@ import { barcodePattern } from "@/dto/store/barcode-pattern";
 import { moneyPattern } from "@/dto/store/money-pattern";
 import { checkoutCart, createCart, deleteCart, getCart, listCarts, setCartItem } from "@/services/Main/store/sales-cart.service";
 import { exportMunicipalStore } from "@/services/Main/store/store-export.service";
-import { updateMunicipalStock } from "@/services/Main/store/store.service";
+import { updateMunicipalProductStatus, updateMunicipalStock } from "@/services/Main/store/store.service";
 import { getMunicipalDashboard } from "@/services/Main/store/municipal-dashboard.service";
 
 const router = Router();
@@ -66,6 +66,10 @@ router.patch("/admin/products/:id/stock", seller, (req, res) => respond(res, asy
     }).parse(req.body);
   return { product: await updateMunicipalStock(req.user!.id, uuid.parse(req.params.id), input) };
 }));
+router.patch("/admin/products/:id/status", seller, (req, res) => respond(res, async () => {
+  const { active } = z.object({ active: z.boolean() }).strict().parse(req.body);
+  await updateMunicipalProductStatus(req.user!.id, uuid.parse(req.params.id), active);
+}, 204));
 router.get("/admin/redemptions", requireRole(Role.PrefeituraVendedor), adminRedemptionsController);
 router.post("/admin/redemptions/validate", requireRole(Role.PrefeituraVendedor), validateDto(ValidatePickupDto), validatePickupController);
 
