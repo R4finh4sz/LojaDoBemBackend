@@ -101,7 +101,6 @@ async function requestPasswordChallenge(where: Prisma.UserWhereUniqueInput, sess
   try {
     await sendEmail({
       to: decryptSensitiveData(user.email),
-      name: decryptSensitiveData(user.name),
       subject: session ? "Alteração de senha ReciclaOnline" : "Recuperação de senha ReciclaOnline",
       textContent: `Olá, ${decryptSensitiveData(user.name)}.\n\nSeu código para redefinir a senha é: ${code}\n\nEle expira em ${securityConfig.passwordResetCodeExpiresMinutes} minutos. Se você não solicitou a recuperação, ignore este e-mail.`,
       htmlContent: `<p>Olá, ${decryptSensitiveData(user.name)}.</p><p>Seu código para redefinir a senha é:</p><p><strong>${code}</strong></p><p>Ele expira em ${securityConfig.passwordResetCodeExpiresMinutes} minutos.</p><p>Se você não solicitou a recuperação, ignore este e-mail.</p>`,

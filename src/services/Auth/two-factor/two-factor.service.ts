@@ -71,7 +71,6 @@ export async function createTwoFactorChallenge(user: { id: string; email: string
 
   await sendEmail({
     to: user.email,
-    name: user.name,
     subject: "Código de verificação ReciclaOnline",
     textContent: [
       "Olá,",
