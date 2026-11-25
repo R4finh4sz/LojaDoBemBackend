@@ -10,7 +10,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
-    "data:encrypt": "tsx src/scripts/encrypt-sensitive-data.ts"
+    "data:encrypt": "tsx src/scripts/encrypt-sensitive-data.ts",
+    "data:municipal-ownership": "node -r ./dist/register-paths dist/scripts/backfill-municipal-ownership.js"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
@@ -19,9 +20,9 @@
     "class-validator": "^0.15.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
+    "exceljs": "4.4.0",
     "express": "^4.21.0",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^9.0.3",
     "pdfkit": "^0.19.1",
     "swagger-jsdoc": "^6.3.0",
     "swagger-ui-express": "^5.0.1",
@@ -33,7 +34,6 @@
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.7.4",
-    "@types/nodemailer": "^8.0.1",
     "@types/pdfkit": "^0.17.6",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",

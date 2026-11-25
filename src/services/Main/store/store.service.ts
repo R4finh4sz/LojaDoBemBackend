@@ -1,118 +1,205 @@
 import { randomBytes } from "crypto";
 import { Prisma, RedemptionStatus, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { decryptSensitiveData } from "@/services/Auth/data-protection/data-protection.service";
+import { createSearchHash, decryptSensitiveData } from "@/services/Auth/data-protection/data-protection.service";
+import { StoreError } from "./exceptions/StoreError";
 import { InsufficientBalanceError } from "./exceptions/InsufficientBalanceError";
 import { InsufficientStockError } from "./exceptions/InsufficientStockError";
-import { StoreError } from "./exceptions/StoreError";
+import { auditedOperation, previousAudit } from "./store-audit.service";
 
 export { StoreError } from "./exceptions/StoreError";
 
 const REDEMPTION_DAYS = 5;
-const productPublicSelect = {
-  id: true, name: true, description: true, photo: true, price: true,
-  quantity: true, city: true, state: true, active: true, createdAt: true, updatedAt: true,
+export const productPublicSelect = {
+  id: true, name: true, description: true, photo: true, barcode: true, price: true,
+  quantity: true, municipalityId: true, city: true, state: true, active: true, createdAt: true, updatedAt: true,
 } satisfies Prisma.ProductSelect;
 const redemptionPublicSelect = {
-  id: true, quantity: true, unitPrice: true, totalPrice: true, pickupCode: true,
+  id: true, cartId: true, quantity: true, unitPrice: true, totalPrice: true, pickupCode: true,
   status: true, expiresAt: true, completedAt: true, createdAt: true, updatedAt: true,
 } satisfies Prisma.RedemptionSelect;
-
-function sameLocation(a: { city: string; state: string }, b: { city: string; state: string }) {
-  return a.city.trim().toLocaleLowerCase("pt-BR") === b.city.trim().toLocaleLowerCase("pt-BR") &&
-    a.state.trim().toUpperCase() === b.state.trim().toUpperCase();
-}
-
-function decryptedLocation(value: { city: string; state: string }) {
-  return { city: decryptSensitiveData(value.city), state: decryptSensitiveData(value.state) };
-}
 
 function decryptPickupUser<T extends { user?: { name: string } }>(value: T): T {
   if (value.user) value.user.name = decryptSensitiveData(value.user.name);
   return value;
 }
 
-export async function createProduct(adminId: string, input: { name: string; description: string; photo: string; price: string; quantity: number }) {
-  const admin = await prisma.user.findUnique({ where: { id: adminId }, select: { city: true, state: true } });
-  if (!admin) throw new StoreError("Administrador não encontrado", 404);
-  const location = decryptedLocation(admin);
-  return prisma.product.create({ data: { ...input, adminId, city: location.city, state: location.state }, select: productPublicSelect });
+export async function sellerMunicipality(sellerId: string, tx: Prisma.TransactionClient = prisma) {
+  const seller = await tx.user.findUnique({
+    where: { id: sellerId, role: Role.PrefeituraVendedor, active: true, deletedAt: null },
+    select: { municipality: { select: { id: true, city: true, state: true } } },
+  });
+  if (!seller) throw new StoreError("Vendedor não encontrado", 404);
+  if (!seller.municipality) throw new StoreError("Vendedor sem vínculo com uma prefeitura", 409);
+  return seller.municipality;
+}
+
+export async function createProduct(adminId: string, input: { name: string; description: string; photo: string; price: string; quantity: number; barcode?: string }) {
+  try {
+    return await auditedOperation(async (tx) => {
+      const location = await sellerMunicipality(adminId, tx);
+      return tx.product.create({ data: { ...input, adminId, municipalityId: location.id, city: location.city, state: location.state }, select: productPublicSelect });
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new StoreError("Código de barras já cadastrado neste município", 409);
+    }
+    throw error;
+  }
 }
 
 export async function listProductsForUser(userId: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { city: true, state: true } });
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { municipalityId: true } });
   if (!user) throw new StoreError("Usuário não encontrado", 404);
-  const location = decryptedLocation(user);
+  if (!user.municipalityId) return [];
   return prisma.product.findMany({
-    where: { city: { equals: location.city, mode: "insensitive" }, state: { equals: location.state, mode: "insensitive" }, active: true, quantity: { gt: 0 } },
+    where: { municipalityId: user.municipalityId, active: true, quantity: { gt: 0 } },
     orderBy: { createdAt: "desc" },
     select: productPublicSelect,
   });
 }
 
-export async function listAdminProducts(adminId: string) {
-  return prisma.product.findMany({ where: { adminId }, orderBy: { createdAt: "desc" }, select: productPublicSelect });
+export async function listAdminProducts(adminId: string, filters: {
+  page: number; search?: string; barcode?: string; stock?: "available" | "out";
+}) {
+  const location = await sellerMunicipality(adminId);
+  const { page, barcode, stock } = filters;
+  const limit = 9;
+  const search = filters.search?.replace(/[\\%_]/g, "\\$&");
+  const match = { contains: search, mode: "insensitive" as const };
+  const where: Prisma.ProductWhereInput = { municipalityId: location.id, barcode };
+  if (search) where.OR = [{ name: match }, { description: match }];
+  if (stock === "available") {
+    where.active = true;
+    where.quantity = { gt: 0 };
+  }
+  if (stock === "out") where.quantity = 0;
+
+  const [total, products] = await prisma.$transaction([
+    prisma.product.count({ where }),
+    prisma.product.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: (page - 1) * limit,
+      take: limit,
+      select: productPublicSelect,
+    }),
+  ], { isolationLevel: "RepeatableRead" });
+  return { products, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 }
 
-export async function grantEcoCoin(adminId: string, userId: string, amountValue: string) {
-  const amount = new Prisma.Decimal(amountValue);
-  if (amount.lte(0)) throw new StoreError("O valor deve ser maior que zero", 400);
-  return prisma.$transaction(async (tx) => {
-    const [admin, user] = await Promise.all([
-      tx.user.findUnique({ where: { id: adminId }, select: { city: true, state: true } }),
-      tx.user.findUnique({ where: { id: userId }, select: { city: true, state: true, role: true, active: true } }),
-    ]);
-    if (!admin || !user) throw new StoreError("Usuário não encontrado", 404);
-    if (user.role !== Role.USER || !user.active) throw new StoreError("EcoCoin só pode ser creditada a um usuário ativo", 400);
-    if (!sameLocation(decryptedLocation(admin), decryptedLocation(user))) throw new StoreError("O administrador só pode creditar usuários da própria cidade", 403);
-    const updated = await tx.user.update({ where: { id: userId }, data: { ecoCoinBalance: { increment: amount } }, select: { id: true, ecoCoinBalance: true } });
-    await tx.ecoCoinTransaction.create({ data: { userId, grantedById: adminId, type: "CREDIT", amount, description: "Crédito concedido pelo administrador" } });
-    return updated;
+type StockUpdate = { quantity: number; expectedQuantity: number; price?: string; expectedPrice?: string };
+
+export function updateMunicipalStock(sellerId: string, productId: string, { quantity, expectedQuantity, price, expectedPrice }: StockUpdate) {
+  return auditedOperation(async (tx) => {
+    const location = await sellerMunicipality(sellerId, tx);
+    const scope = { id: productId, municipalityId: location.id };
+    const updated = await tx.product.updateMany({
+      where: { ...scope, quantity: expectedQuantity, price: expectedPrice }, data: { quantity, price },
+    });
+    const product = await tx.product.findFirst({ where: scope, select: productPublicSelect });
+    if (!product) throw new StoreError("Produto não encontrado neste município", 404);
+    if (!updated.count) throw new StoreError(price === undefined
+      ? "O estoque foi alterado. Consulte a quantidade atual"
+      : "O estoque ou o preço foi alterado. Confira os valores atuais antes de salvar", 409);
+    return product;
+  });
+}
+
+export function updateMunicipalProductStatus(sellerId: string, productId: string, active: boolean) {
+  return auditedOperation(async (tx) => {
+    const location = await sellerMunicipality(sellerId, tx);
+    const updated = await tx.product.updateMany({
+      where: { id: productId, municipalityId: location.id },
+      data: { active },
+    });
+    if (!updated.count) throw new StoreError("Produto não encontrado neste município", 404);
   });
 }
 
 export async function getEcoCoinBalance(userId: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { ecoCoinBalance: true } });
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { legacyEcoCoinBalance: true, municipalWallet: { select: { balance: true } } } });
   if (!user) throw new StoreError("Usuário não encontrado", 404);
-  return user.ecoCoinBalance;
+  return user.municipalWallet?.balance ?? user.legacyEcoCoinBalance;
 }
 
-export async function redeemProduct(userId: string, productId: string, quantity: number) {
-  return prisma.$transaction(async (tx) => {
+export async function redeemProduct(userId: string, productId: string, quantity: number, requestKey?: string) {
+  const requestHash = createSearchHash(JSON.stringify([productId, quantity]));
+  const select = { ...redemptionPublicSelect, product: { select: productPublicSelect } };
+  return auditedOperation(async (tx) => {
+    if (requestKey) {
+      const prior = await previousAudit(tx, userId, "APP_PURCHASE", requestKey, requestHash);
+      if (prior?.redemptionId) return tx.redemption.findUnique({ where: { id: prior.redemptionId }, select });
+    }
     const [user, product] = await Promise.all([
-      tx.user.findUnique({ where: { id: userId }, select: { city: true, state: true } }),
+      tx.user.findUnique({ where: { id: userId, active: true, deletedAt: null }, select: { municipalityId: true, municipalWallet: true } }),
       tx.product.findUnique({ where: { id: productId } }),
     ]);
     if (!user || !product || !product.active) throw new StoreError("Produto não encontrado", 404);
-    if (!sameLocation(decryptedLocation(user), product)) throw new StoreError("Produto indisponível para a sua cidade", 403);
+    if (user.municipalityId !== product.municipalityId || user.municipalWallet?.municipalityId !== product.municipalityId) throw new StoreError("Produto indisponível para a sua cidade", 403);
     const total = product.price.mul(quantity);
     const stock = await tx.product.updateMany({ where: { id: productId, active: true, quantity: { gte: quantity } }, data: { quantity: { decrement: quantity } } });
     if (!stock.count) throw new InsufficientStockError();
-    const balance = await tx.user.updateMany({ where: { id: userId, active: true, ecoCoinBalance: { gte: total } }, data: { ecoCoinBalance: { decrement: total } } });
+    const wallet = user.municipalWallet;
+    const balance = await tx.municipalWallet.updateMany({ where: { id: wallet.id, balance: { gte: total } }, data: { balance: { decrement: total } } });
     if (!balance.count) throw new InsufficientBalanceError();
     const expiresAt = new Date(Date.now() + REDEMPTION_DAYS * 24 * 60 * 60 * 1000);
     const redemption = await tx.redemption.create({ data: { userId, productId, quantity, unitPrice: product.price, totalPrice: total, pickupCode: randomBytes(6).toString("hex").toUpperCase(), expiresAt } });
-    await tx.ecoCoinTransaction.create({ data: { userId, redemptionId: redemption.id, type: "REDEMPTION", amount: total.negated(), description: `Troca por ${product.name}` } });
+    await tx.ecoCoinTransaction.create({ data: { userId, municipalityId: product.municipalityId, redemptionId: redemption.id, type: "REDEMPTION", amount: total.negated() } });
+    await tx.storeAudit.create({
+      data: {
+        actorId: userId, userId, municipalityId: product.municipalityId, operation: "APP_PURCHASE", amount: total.negated(),
+        balanceBefore: wallet.balance, balanceAfter: wallet.balance.sub(total),
+        productId, quantity, redemptionId: redemption.id, requestKey, requestHash: requestKey ? requestHash : undefined,
+      },
+    });
     return tx.redemption.findUnique({
       where: { id: redemption.id },
-      select: { ...redemptionPublicSelect, product: { select: productPublicSelect } },
+      select,
     });
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  });
+}
+
+export async function refundPendingRedemption(
+  tx: Prisma.TransactionClient,
+  id: string,
+  reason: string,
+  expiredAt?: Date,
+) {
+  const where = { id, status: RedemptionStatus.PENDING, expiresAt: expiredAt && { lte: expiredAt } };
+  const claimed = await tx.redemption.updateMany({ where, data: { status: RedemptionStatus.EXPIRED, pickupCode: null } });
+  if (!claimed.count) return false;
+  const item = await tx.redemption.findUniqueOrThrow({ where: { id } });
+  const wallet = await tx.municipalWallet.update({
+    where: { userId: item.userId }, data: { balance: { increment: item.totalPrice } },
+  });
+  const product = await tx.product.update({
+    where: { id: item.productId }, data: { quantity: { increment: item.quantity } },
+  });
+  await tx.ecoCoinTransaction.create({
+    data: {
+      userId: item.userId, municipalityId: product.municipalityId, redemptionId: id,
+      type: "REFUND", amount: item.totalPrice, description: reason,
+    },
+  });
+  await tx.storeAudit.create({
+    data: {
+      userId: item.userId, municipalityId: product.municipalityId, operation: "REFUND", amount: item.totalPrice,
+      balanceBefore: wallet.balance.sub(item.totalPrice), balanceAfter: wallet.balance,
+      redemptionId: id, productId: item.productId, quantity: item.quantity,
+    },
+  });
+  return true;
 }
 
 export async function expirePendingRedemptions() {
-  const expired = await prisma.redemption.findMany({ where: { status: RedemptionStatus.PENDING, expiresAt: { lte: new Date() } }, select: { id: true, userId: true, productId: true, quantity: true, totalPrice: true } });
+  const now = new Date();
+  const expired = await prisma.redemption.findMany({
+    where: { status: RedemptionStatus.PENDING, expiresAt: { lte: now } }, select: { id: true },
+  });
   let count = 0;
-  for (const item of expired) {
-    const processed = await prisma.$transaction(async (tx) => {
-      const claimed = await tx.redemption.updateMany({ where: { id: item.id, status: RedemptionStatus.PENDING, expiresAt: { lte: new Date() } }, data: { status: RedemptionStatus.EXPIRED, pickupCode: null } });
-      if (!claimed.count) return false;
-      await tx.user.update({ where: { id: item.userId }, data: { ecoCoinBalance: { increment: item.totalPrice } } });
-      await tx.product.update({ where: { id: item.productId }, data: { quantity: { increment: item.quantity } } });
-      await tx.ecoCoinTransaction.create({ data: { userId: item.userId, redemptionId: item.id, type: "REFUND", amount: item.totalPrice, description: "Estorno por troca expirada" } });
-      return true;
-    });
-    if (processed) count++;
+  for (const { id } of expired) {
+    if (await auditedOperation((tx) => refundPendingRedemption(tx, id, "Estorno por troca expirada", now))) count++;
   }
   return count;
 }
@@ -126,25 +213,51 @@ export async function listUserRedemptions(userId: string) {
   });
 }
 
-export async function listAdminRedemptions(adminId: string) {
-  await expirePendingRedemptions();
-  const redemptions = await prisma.redemption.findMany({
-    where: { product: { adminId } },
+export async function listAdminRedemptions(adminId: string, protocol?: string) {
+  if (!protocol) await expirePendingRedemptions();
+  const location = await sellerMunicipality(adminId);
+  const query = {
+    where: { product: { municipalityId: location.id } },
     select: { ...redemptionPublicSelect, product: { select: productPublicSelect }, user: { select: { name: true } } },
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: "desc" as const },
+  };
+  if (!protocol) return (await prisma.redemption.findMany(query)).map(decryptPickupUser);
+
+  const sales = await prisma.redemption.findMany({
+    ...query,
+    where: { ...query.where, status: RedemptionStatus.COMPLETED, cartId: { not: null },
+      OR: [{ protocol }, { cartId: protocol }] },
+    select: { ...query.select, protocol: true, validatedBy: { select: { name: true } } },
   });
-  return redemptions.map(decryptPickupUser);
+  return sales.map(({ validatedBy, ...sale }) => ({
+    ...decryptPickupUser(sale),
+    sellerName: validatedBy?.name ? decryptSensitiveData(validatedBy.name) : null,
+  }));
 }
 
 export async function validatePickupCode(adminId: string, code: string) {
   await expirePendingRedemptions();
-  return prisma.$transaction(async (tx) => {
-    const redemption = await tx.redemption.findUnique({ where: { pickupCode: code }, include: { product: true } });
+  return auditedOperation(async (tx) => {
+    const location = await sellerMunicipality(adminId, tx);
+    const redemption = await tx.redemption.findUnique({
+      where: { pickupCode: code, user: { active: true } },
+      include: { product: true },
+    });
     if (!redemption || redemption.status !== RedemptionStatus.PENDING) throw new StoreError("Código inválido ou já utilizado", 404);
-    if (redemption.product.adminId !== adminId) throw new StoreError("Código não pertence a esta loja", 403);
+    if (redemption.product.municipalityId !== location.id) throw new StoreError("Código não pertence a este município", 403);
     if (redemption.expiresAt <= new Date()) throw new StoreError("Código expirado", 410);
     const result = await tx.redemption.updateMany({ where: { id: redemption.id, status: RedemptionStatus.PENDING, pickupCode: code }, data: { status: RedemptionStatus.COMPLETED, pickupCode: null, completedAt: new Date(), validatedById: adminId } });
     if (!result.count) throw new StoreError("Código inválido ou já utilizado", 409);
+    const buyer = await tx.municipalWallet.findUniqueOrThrow({
+      where: { userId: redemption.userId, municipalityId: location.id }, select: { balance: true },
+    });
+    await tx.storeAudit.create({
+      data: {
+        actorId: adminId, userId: redemption.userId, municipalityId: location.id, operation: "PICKUP", amount: 0,
+        balanceBefore: buyer.balance, balanceAfter: buyer.balance,
+        redemptionId: redemption.id, productId: redemption.productId, quantity: redemption.quantity,
+      },
+    });
     const completed = await tx.redemption.findUnique({
       where: { id: redemption.id },
       select: { ...redemptionPublicSelect, product: { select: productPublicSelect }, user: { select: { name: true } } },

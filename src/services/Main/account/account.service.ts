@@ -1,7 +1,10 @@
 import PDFDocument from "pdfkit";
+import { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decryptSensitiveData } from "@/services/Auth/data-protection/data-protection.service";
 import { verifyPassword } from "@/services/Auth/password/password.service";
+import { refundPendingRedemption } from "@/services/Main/store/store.service";
+import { auditedOperation } from "@/services/Main/store/store-audit.service";
 
 export class AccountError extends Error {
   constructor(message: string, public readonly status: number) {
@@ -12,29 +15,57 @@ export class AccountError extends Error {
 export async function deleteAccount(userId: string, password: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { password: true, products: { select: { id: true }, take: 1 } },
+    select: { password: true, role: true },
   });
 
   if (!user) throw new AccountError("Conta não encontrada", 404);
   if (!(await verifyPassword(password, user.password))) {
     throw new AccountError("Senha incorreta", 401);
   }
-  if (user.products.length) {
-    throw new AccountError("Contas que administram produtos devem transferi-los antes da exclusão", 409);
-  }
+  await eraseAccount(userId, false, user.password);
+  return user.role;
+}
 
-  await prisma.$transaction(async (tx) => {
-    // Remove referências opcionais mantidas em históricos de terceiros.
-    await tx.redemption.updateMany({ where: { validatedById: userId }, data: { validatedById: null } });
-    await tx.ecoCoinTransaction.updateMany({ where: { grantedById: userId }, data: { grantedById: null } });
-
-    await tx.ecoCoinTransaction.deleteMany({ where: { userId } });
-    await tx.redemption.deleteMany({ where: { userId } });
+export async function eraseAccount(
+  userId: string,
+  pendingOnly: boolean | undefined,
+  passwordHash?: string,
+  municipalSellerId?: string,
+  operatorRole?: typeof Role.PrefeituraVendedor | typeof Role.COOPERATIVA,
+) {
+  if (pendingOnly === undefined && !municipalSellerId) throw new AccountError("Vendedor vinculado à exclusão é obrigatório", 403);
+  return auditedOperation(async (tx) => {
+    const where = {
+      id: userId, deletedAt: null, pendingActivation: pendingOnly, password: passwordHash, role: operatorRole,
+      ...(municipalSellerId && {
+        role: Role.USER,
+        municipality: { users: { some: { id: municipalSellerId, role: Role.PrefeituraVendedor, active: true, deletedAt: null } } },
+      }),
+    };
+    const recipient = pendingOnly === undefined && municipalSellerId
+      ? await tx.user.findFirst({ where, select: { email: true } })
+      : null;
+    const claimed = await tx.user.updateMany({
+      where,
+      data: {
+        deletedAt: new Date(), active: false, pendingActivation: false, termsAccepted: false,
+        name: "", cpf: "", cpfHash: null, email: "", emailHash: null, birthDate: "",
+        phone: "", cep: "", address: "", city: "", state: "", password: "", cnpj: null,
+        profilePhoto: null, jobTitle: null, addressNumber: null, authorizationPdf: null,
+      },
+    });
+    if (!claimed.count) throw new AccountError("Conta não encontrada para exclusão", 404);
+    const pending = await tx.redemption.findMany({ where: { userId, status: "PENDING" }, select: { id: true } });
+    for (const { id } of pending) {
+      await refundPendingRedemption(tx, id, "Estorno por exclusão da conta");
+    }
+    await tx.salesCart.deleteMany({ where: { buyerId: userId } });
+    await tx.residentActivation.deleteMany({ where: { userId } });
     await tx.termAccept.deleteMany({ where: { userId } });
     await tx.passwordResetChallenge.deleteMany({ where: { userId } });
     await tx.twoFactorChallenge.deleteMany({ where: { userId } });
     await tx.session.deleteMany({ where: { userId } });
-    await tx.user.delete({ where: { id: userId } });
+    return recipient?.email;
   });
 }
 
@@ -43,10 +74,11 @@ function addField(doc: PDFKit.PDFDocument, label: string, value: unknown) {
   doc.font("Helvetica").text(value === null || value === undefined || value === "" ? "Não informado" : String(value));
 }
 
-export async function exportAccountPdf(userId: string): Promise<Buffer> {
+async function getAccountExport(userId: string) {
   const user = await prisma.user.findUnique({
-    where: { id: userId },
+    where: { id: userId, deletedAt: null },
     include: {
+      municipalWallet: { select: { balance: true } },
       termAccepts: { include: { term: true }, orderBy: { acceptedAt: "desc" } },
       redemptions: { include: { product: true }, orderBy: { createdAt: "desc" } },
       ecoCoinTransactions: { orderBy: { createdAt: "desc" } },
@@ -62,11 +94,40 @@ export async function exportAccountPdf(userId: string): Promise<Buffer> {
     phone: decryptSensitiveData(user.phone),
     cep: decryptSensitiveData(user.cep),
     address: decryptSensitiveData(user.address),
+    addressNumber: user.addressNumber ? decryptSensitiveData(user.addressNumber) : null,
+    cnpj: user.cnpj ? decryptSensitiveData(user.cnpj) : null,
     city: decryptSensitiveData(user.city),
     state: decryptSensitiveData(user.state),
     email: decryptSensitiveData(user.email),
+    jobTitle: user.jobTitle ? decryptSensitiveData(user.jobTitle) : null,
     profilePhoto: user.profilePhoto ? decryptSensitiveData(user.profilePhoto) : null,
   };
+
+  return { user, personal };
+}
+
+export async function exportAccountJson(userId: string) {
+  const { user, personal } = await getAccountExport(userId);
+  return {
+    exportedAt: new Date(),
+    account: { ...personal, id: user.id, role: user.role, active: user.active,
+      ecoCoinBalance: user.role === "USER" ? (user.municipalWallet?.balance ?? user.legacyEcoCoinBalance).toFixed(2) : null,
+      createdAt: user.createdAt, updatedAt: user.updatedAt },
+    terms: user.termAccepts.map(({ acceptedAt, term }) => ({ title: term.title, type: term.type, version: term.version, acceptedAt })),
+    redemptions: user.redemptions.map(({ id, product, quantity, totalPrice, status, createdAt }) => ({
+      id, product: product.name, quantity, totalPrice: totalPrice.toFixed(2), status, createdAt,
+    })),
+    ecoCoinTransactions: user.ecoCoinTransactions.map(({ id, type, amount, description, createdAt }) => ({
+      id, type, amount: amount.toFixed(2), description, createdAt,
+    })),
+    products: user.products.map(({ id, name, description, price, quantity, active, createdAt }) => ({
+      id, name, description, price: price.toFixed(2), quantity, active, createdAt,
+    })),
+  };
+}
+
+export async function exportAccountPdf(userId: string): Promise<Buffer> {
+  const { user, personal } = await getAccountExport(userId);
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 50, size: "A4", info: { Title: "Exportação de dados pessoais" } });
@@ -88,11 +149,15 @@ export async function exportAccountPdf(userId: string): Promise<Buffer> {
     addField(doc, "E-mail", personal.email);
     addField(doc, "CEP", personal.cep);
     addField(doc, "Endereço", personal.address);
+    if (personal.addressNumber) addField(doc, "Número", personal.addressNumber);
+    if (personal.cnpj) addField(doc, "CNPJ", personal.cnpj);
     addField(doc, "Cidade/UF", `${personal.city}/${personal.state}`);
     addField(doc, "Foto de perfil", personal.profilePhoto);
     addField(doc, "Perfil", user.role);
     addField(doc, "Conta ativa", user.active ? "Sim" : "Não");
-    addField(doc, "Saldo EcoCoin", user.ecoCoinBalance.toFixed(2));
+    if (user.role === "USER") {
+      addField(doc, "Saldo EcoCoin", (user.municipalWallet?.balance ?? user.legacyEcoCoinBalance).toFixed(2));
+    }
     addField(doc, "Criada em", user.createdAt.toLocaleString("pt-BR"));
     addField(doc, "Atualizada em", user.updatedAt.toLocaleString("pt-BR"));
 

@@ -9,8 +9,39 @@ datasource db {
 
 enum Role {
   USER
-  ADMIN
+  COOPERATIVA
+  PrefeituraVendedor
   MASTER
+}
+
+enum SecurityEventKind {
+  RATE_LIMIT_BLOCK
+  TWO_FACTOR_BLOCK
+  LOGIN_SUCCESS
+  LOGIN_FAILURE
+  TWO_FACTOR_REQUIRED
+  TWO_FACTOR_SUCCESS
+  TWO_FACTOR_FAILURE
+}
+
+model MasterIdentity {
+  id     Int    @id
+  userId String
+
+  @@map("master_identity")
+}
+
+model SecurityEvent {
+  id          String            @id @default(uuid())
+  kind        SecurityEventKind
+  clientKey   String?
+  blockedUntil DateTime?
+  createdAt   DateTime          @default(now())
+
+  @@index([kind, createdAt])
+  @@index([kind, blockedUntil, clientKey])
+  @@index([createdAt])
+  @@map("security_events")
 }
 
 enum TermType {
@@ -30,6 +61,36 @@ enum RedemptionStatus {
   EXPIRED
 }
 
+model Municipality {
+  id                  String               @id @default(uuid())
+  city                String
+  state               String
+  name                String?
+  address             String?
+  cep                 String?
+  cnpj                String?              @unique
+  users               User[]
+  products            Product[]
+  wallets             MunicipalWallet[]
+  ecoCoinTransactions EcoCoinTransaction[]
+  storeAudits         StoreAudit[]
+
+  @@unique([city, state])
+  @@map("municipalities")
+}
+
+model MunicipalWallet {
+  id             String       @id @default(uuid())
+  municipalityId String
+  userId         String?      @unique
+  balance        Decimal      @default(0) @db.Decimal(12, 2)
+  municipality   Municipality @relation(fields: [municipalityId], references: [id], onDelete: Restrict)
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([municipalityId])
+  @@map("municipal_wallets")
+}
+
 model User {
   id                         String                   @id @default(uuid())
   name                       String
@@ -42,51 +103,145 @@ model User {
   city                       String
   state                      String
   profilePhoto               String?
+  jobTitle                   String?
   termsAccepted              Boolean                  @default(false)
   email                      String
   emailHash                  String?                  @unique
   password                   String
+  twoFactorEnabled           Boolean                  @default(false)
+  firstLogin                 Boolean                  @default(false)
   role                       Role                     @default(USER)
   active                     Boolean                  @default(true)
+  pendingActivation          Boolean                  @default(false)
+  deletedAt                  DateTime?
+  cnpj                       String?
+  addressNumber              String?
+  authorizationPdf           String?
+  preRegisteredById          String?
+  activation                 ResidentActivation?
   createdAt                  DateTime                 @default(now())
   updatedAt                  DateTime                 @updatedAt
   termAccepts                TermAccept[]
   sessions                   Session[]
   twoFactorChallenges        TwoFactorChallenge[]
   passwordResetChallenges    PasswordResetChallenge[]
-  ecoCoinBalance             Decimal                  @default(0) @db.Decimal(12, 2)
+  legacyEcoCoinBalance       Decimal                  @default(0) @map("ecoCoinBalance") @db.Decimal(12, 2)
+  municipalityId             String?
+  municipality               Municipality?            @relation(fields: [municipalityId], references: [id], onDelete: Restrict)
+  municipalWallet            MunicipalWallet?
   products                   Product[]                @relation("AdminProducts")
   redemptions                Redemption[]             @relation("UserRedemptions")
   validatedRedemptions       Redemption[]             @relation("ValidatedRedemptions")
   ecoCoinTransactions        EcoCoinTransaction[]     @relation("UserEcoCoinTransactions")
   grantedEcoCoinTransactions EcoCoinTransaction[]     @relation("GrantedEcoCoinTransactions")
+  salesCarts                 SalesCart[]              @relation("SellerCarts")
+  purchaseCarts              SalesCart[]              @relation("BuyerCarts")
 
+  @@index([municipalityId])
   @@map("users")
 }
 
 model Product {
-  id          String       @id @default(uuid())
-  adminId     String
-  name        String
-  description String
-  photo       String
-  price       Decimal      @db.Decimal(12, 2)
-  quantity    Int
-  city        String
-  state       String
-  active      Boolean      @default(true)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  admin       User         @relation("AdminProducts", fields: [adminId], references: [id])
-  redemptions Redemption[]
+  id             String          @id @default(uuid())
+  adminId        String?
+  municipalityId String
+  name           String
+  description    String
+  photo          String
+  barcode        String?
+  price          Decimal         @db.Decimal(12, 2)
+  quantity       Int
+  city           String
+  state          String
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  admin          User?           @relation("AdminProducts", fields: [adminId], references: [id], onDelete: SetNull)
+  municipality   Municipality    @relation(fields: [municipalityId], references: [id], onDelete: Restrict)
+  redemptions    Redemption[]
+  cartItems      SalesCartItem[]
 
-  @@index([city, state, active])
+  @@unique([municipalityId, barcode])
+  @@index([municipalityId, active])
   @@index([adminId])
   @@map("products")
 }
 
+model SalesCart {
+  id        String          @id @default(uuid())
+  sellerId  String
+  buyerId   String
+  expiresAt DateTime
+  seller    User            @relation("SellerCarts", fields: [sellerId], references: [id], onDelete: Cascade)
+  buyer     User            @relation("BuyerCarts", fields: [buyerId], references: [id], onDelete: Cascade)
+  items     SalesCartItem[]
+
+  @@index([sellerId, expiresAt])
+  @@index([buyerId])
+  @@index([expiresAt])
+  @@map("sales_carts")
+}
+
+model SalesCartItem {
+  cartId    String
+  productId String
+  quantity  Int
+  cart      SalesCart @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id])
+
+  @@id([cartId, productId])
+  @@index([productId])
+  @@map("sales_cart_items")
+}
+
+model ResidentActivation {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  attempts  Int      @default(0)
+  tokenHash String?
+  expiresAt DateTime
+
+  @@map("resident_activations")
+}
+
+model StoreAudit {
+  id             String        @id @default(uuid())
+  operation      String
+  municipalityId String?
+  municipality   Municipality? @relation(fields: [municipalityId], references: [id], onDelete: Restrict)
+  actorId        String?
+  userId         String
+  amount         Decimal       @db.Decimal(12, 2)
+  balanceBefore  Decimal       @db.Decimal(12, 2)
+  balanceAfter   Decimal       @db.Decimal(12, 2)
+  redemptionId   String?
+  productId      String?
+  quantity       Int?
+  requestKey     String?
+  requestHash    String?
+  cartId         String?
+  createdAt      DateTime      @default(now())
+
+  @@unique([actorId, operation, requestKey])
+  @@index([userId, createdAt])
+  @@index([actorId, cartId])
+  @@index([municipalityId, createdAt])
+  @@map("store_audit")
+}
+
+model StoreSaleCounter {
+  day      String @id
+  sequence Int
+
+  @@map("store_sale_counters")
+}
+
 model Redemption {
+  protocol      String?
   id            String           @id @default(uuid())
+  cartId        String?
   userId        String
   productId     String
   quantity      Int
@@ -103,6 +258,7 @@ model Redemption {
   product       Product          @relation(fields: [productId], references: [id])
   validatedBy   User?            @relation("ValidatedRedemptions", fields: [validatedById], references: [id])
 
+  @@index([protocol])
   @@index([userId, status])
   @@index([productId, status])
   @@index([status, expiresAt])
@@ -110,17 +266,20 @@ model Redemption {
 }
 
 model EcoCoinTransaction {
-  id           String                 @id @default(uuid())
-  userId       String
-  grantedById  String?
-  redemptionId String?
-  type         EcoCoinTransactionType
-  amount       Decimal                @db.Decimal(12, 2)
-  description  String?
-  createdAt    DateTime               @default(now())
-  user         User                   @relation("UserEcoCoinTransactions", fields: [userId], references: [id])
-  grantedBy    User?                  @relation("GrantedEcoCoinTransactions", fields: [grantedById], references: [id])
+  id             String                 @id @default(uuid())
+  userId         String?
+  municipalityId String?
+  grantedById    String?
+  redemptionId   String?
+  type           EcoCoinTransactionType
+  amount         Decimal                @db.Decimal(12, 2)
+  description    String?
+  createdAt      DateTime               @default(now())
+  user           User?                  @relation("UserEcoCoinTransactions", fields: [userId], references: [id], onDelete: SetNull)
+  municipality   Municipality?          @relation(fields: [municipalityId], references: [id], onDelete: Restrict)
+  grantedBy      User?                  @relation("GrantedEcoCoinTransactions", fields: [grantedById], references: [id])
 
+  @@index([municipalityId])
   @@index([userId, createdAt])
   @@index([redemptionId])
   @@map("eco_coin_transactions")
@@ -129,6 +288,7 @@ model EcoCoinTransaction {
 model PasswordResetChallenge {
   id                  String    @id @default(uuid())
   userId              String
+  sessionId           String?
   codeHash            String
   codeSalt            String
   attempts            Int       @default(0)
@@ -145,6 +305,7 @@ model PasswordResetChallenge {
   @@index([userId])
   @@index([expiresAt])
   @@index([blockedUntil])
+  @@index([sessionId])
   @@map("password_reset_challenges")
 }
 
@@ -153,10 +314,15 @@ model Session {
   userId    String
   expiresAt DateTime
   revokedAt DateTime?
+  browser   String?
+  device    String?
+  city      String?
+  region    String?
   createdAt DateTime  @default(now())
   user      User      @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([userId, createdAt, id])
   @@index([expiresAt])
   @@map("sessions")
 }

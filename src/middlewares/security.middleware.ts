@@ -1,5 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { securityConfig } from "@/config/env";
+import { prisma } from "@/lib/prisma";
+import { createSearchHash } from "@/services/Auth/data-protection/data-protection.service";
 
 interface AttemptRecord {
   count: number;
@@ -14,7 +16,8 @@ function sleep(ms: number) {
 }
 
 function getClientKey(req: Request) {
-  return `${req.ip}:${req.method}:${req.path}`;
+  const path = req.path.replace(/^(\/store\/admin\/carts\/)[^/]+/i, "$1:id");
+  return `${req.ip}:${req.method}:${path}`;
 }
 
 export async function rateLimitMiddleware(req: Request, res: Response, next: NextFunction) {
@@ -34,9 +37,21 @@ export async function rateLimitMiddleware(req: Request, res: Response, next: Nex
 
   record.count += 1;
 
-  if (record.count > securityConfig.rateLimitMaxAttempts) {
+  const path = req.path.toLowerCase();
+  const maxAttempts = path.startsWith("/store/") || path === "/master/dashboard" || path === "/account/sessions"
+    ? securityConfig.storeRateLimitMaxAttempts
+    : securityConfig.rateLimitMaxAttempts;
+  if (record.count > maxAttempts) {
     record.blockedUntil = now + securityConfig.bruteForceBlockMs;
     attempts.set(key, record);
+    try {
+      await prisma.securityEvent.create({ data: {
+        kind: "RATE_LIMIT_BLOCK", clientKey: createSearchHash(req.ip ?? req.socket.remoteAddress ?? "unknown"),
+        blockedUntil: new Date(record.blockedUntil),
+      } });
+    } catch {
+      console.error("Falha ao registrar bloqueio por rate limit");
+    }
     await sleep(securityConfig.bruteForceDelayMs);
     return res.status(429).json({ message: "Muitas tentativas. Tente novamente mais tarde" });
   }

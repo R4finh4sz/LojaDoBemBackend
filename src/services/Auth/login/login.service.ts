@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/services/Auth/password/password.service";
 import { createTwoFactorChallenge } from "@/services/Auth/two-factor/two-factor.service";
+import { issueSessionToken } from "@/services/Auth/session/session.service";
+import type { SessionMetadata } from "@/services/Auth/session/session-metadata";
 import {
   LoginInput,
   LoginResult,
@@ -12,7 +14,7 @@ import { InactiveUserError } from "./InactiveUserError";
 export { InvalidCredentialsError } from "./InvalidCredentialsError";
 export { InactiveUserError } from "./InactiveUserError";
 
-export async function login({ email, password }: LoginInput): Promise<LoginResult> {
+export async function login({ email, password }: LoginInput, metadata?: SessionMetadata): Promise<LoginResult> {
   const user = await prisma.user.findUnique({
     where: { emailHash: createSearchHash(email) },
     select: {
@@ -22,6 +24,8 @@ export async function login({ email, password }: LoginInput): Promise<LoginResul
       password: true,
       role: true,
       active: true,
+      firstLogin: true,
+      twoFactorEnabled: true,
     },
   });
 
@@ -38,6 +42,10 @@ export async function login({ email, password }: LoginInput): Promise<LoginResul
     throw new InactiveUserError("Usuário desativado");
   }
 
+  if (!user.firstLogin && !user.twoFactorEnabled) {
+    return { twoFactorRequired: false, ...await issueSessionToken(user, metadata) };
+  }
+
   const challenge = await createTwoFactorChallenge({
     ...user,
     name: decryptSensitiveData(user.name),
@@ -46,6 +54,7 @@ export async function login({ email, password }: LoginInput): Promise<LoginResul
 
   return {
     twoFactorRequired: true,
+    ...(user.firstLogin && { firstLogin: true as const }),
     challengeId: challenge.id,
     expiresAt: challenge.expiresAt,
     message: "Código 2FA enviado para o e-mail cadastrado",

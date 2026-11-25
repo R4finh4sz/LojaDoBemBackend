@@ -32,21 +32,14 @@ function isValidCpf(value: string) {
   return firstDigit === Number(cpf[9]) && secondDigit === Number(cpf[10]);
 }
 
-function isAtLeast18YearsOld(birthDate: Date) {
-  const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const hadBirthdayThisYear =
-    today.getMonth() > birthDate.getMonth() ||
-    (today.getMonth() === birthDate.getMonth() && today.getDate() >= birthDate.getDate());
-
-  if (!hadBirthdayThisYear) {
-    age--;
-  }
-
-  return age >= 18;
+function ageInYears(birthDate: Date) {
+  const today = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo" }).format(new Date());
+  const [day, month, year] = today.split("/").map(Number);
+  const birthdayPassed = month * 32 + day >= (birthDate.getUTCMonth() + 1) * 32 + birthDate.getUTCDate();
+  return year - birthDate.getUTCFullYear() - (birthdayPassed ? 0 : 1);
 }
 
-export const registerSchema = z.object({
+export const registerFields = z.object({
   name: z
     .string({ required_error: REQUIRED_FIELD_MESSAGE })
     .transform(normalizeText)
@@ -56,13 +49,16 @@ export const registerSchema = z.object({
     .transform(onlyDigits)
     .pipe(z.string().refine(isValidCpf, "CPF inválido")),
   birthDate: z
-    .coerce
-    .date({
-      required_error: REQUIRED_FIELD_MESSAGE,
-      invalid_type_error: "Data de nascimento inválida",
+    .union([z.string().date(), z.string().datetime({ offset: true })], {
+      errorMap: (_issue, context) => ({
+        message: context.data === undefined ? REQUIRED_FIELD_MESSAGE : "Data de nascimento inválida. Use AAAA-MM-DD",
+      }),
     })
-    .refine((date) => date <= new Date(), "Data de nascimento inválida")
-    .refine(isAtLeast18YearsOld, "Usuário deve ter pelo menos 18 anos"),
+    .transform((value) => new Date(`${value.slice(0, 10)}T00:00:00.000Z`))
+    .refine((date) => {
+      const age = ageInYears(date);
+      return age >= 18 && age <= 90;
+    }, "Idade deve ser de 18 a 90 anos"),
   phone: z
     .string({ required_error: REQUIRED_FIELD_MESSAGE })
     .transform(onlyDigits)
@@ -78,11 +74,13 @@ export const registerSchema = z.object({
   city: z
     .string({ required_error: REQUIRED_FIELD_MESSAGE })
     .transform(normalizeText)
-    .pipe(z.string().min(2, "Cidade obrigatória").max(100, "Cidade muito longa")),
+    .pipe(z.string().min(2, "Cidade inválida").max(100, "Cidade muito longa"))
+    .optional(),
   state: z
     .string({ required_error: REQUIRED_FIELD_MESSAGE })
     .transform(normalizeText)
-    .pipe(z.string().min(2, "Estado obrigatório").max(50, "Estado muito longo")),
+    .pipe(z.string().min(2, "Estado inválido").max(50, "Estado muito longo"))
+    .optional(),
   profilePhoto: z
     .string()
     .trim()
@@ -104,7 +102,15 @@ export const registerSchema = z.object({
     .string({ required_error: REQUIRED_FIELD_MESSAGE })
     .min(8, "Confirmação de senha obrigatória")
     .max(128, "Confirmação de senha muito longa"),
-}).refine((data) => data.password === data.passwordConfirmation, {
+});
+
+export const registerSchema = registerFields.refine((data) => data.password === data.passwordConfirmation, {
   message: "Senhas não conferem",
   path: ["passwordConfirmation"],
+});
+
+export const registerOperatorSchema = registerFields.omit({
+  password: true,
+  passwordConfirmation: true,
+  termsAccepted: true,
 });
