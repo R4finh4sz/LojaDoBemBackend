@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import { corsConfig } from "@/config/env";
 import authRoutes from "@/routes/auth.routes";
 import termsRoutes from "@/routes/terms.routes";
 import storeRoutes from "@/routes/store.routes";
@@ -12,7 +13,9 @@ import { rateLimitMiddleware } from "@/middlewares/security.middleware";
 
 export const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: corsConfig.allowedOrigin ? [corsConfig.allowedOrigin] : false,
+}));
 app.use(rateLimitMiddleware);
 app.post("/residents/pre-registrations", express.json({ limit: "3mb" }));
 app.use(express.json());
