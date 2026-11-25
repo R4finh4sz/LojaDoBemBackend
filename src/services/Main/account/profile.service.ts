@@ -1,14 +1,24 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decryptSensitiveData, encryptSensitiveData } from "@/services/Auth/data-protection/data-protection.service";
+import { resolveMunicipality } from "@/services/Main/residents/municipality";
+import type { profileUpdateSchema } from "@/validation/profile-update.validation";
+import type { z } from "zod";
 import { AccountError } from "./account.service";
 import { verifyPassword } from "@/services/Auth/password/password.service";
 
-const profileFields = { email: true, jobTitle: true, profilePhoto: true, twoFactorEnabled: true } satisfies Prisma.UserSelect;
+const profileFields = { name: true, email: true, cep: true, city: true, state: true, municipalityId: true, address: true, addressNumber: true, jobTitle: true, profilePhoto: true, twoFactorEnabled: true } satisfies Prisma.UserSelect;
 
 function profileData(user: Prisma.UserGetPayload<{ select: typeof profileFields }>) {
   return {
+    name: decryptSensitiveData(user.name),
     email: decryptSensitiveData(user.email),
+    cep: decryptSensitiveData(user.cep),
+    city: decryptSensitiveData(user.city),
+    state: decryptSensitiveData(user.state),
+    municipalityId: user.municipalityId,
+    address: decryptSensitiveData(user.address),
+    addressNumber: user.addressNumber ? decryptSensitiveData(user.addressNumber) : null,
     jobTitle: user.jobTitle ? decryptSensitiveData(user.jobTitle) : null,
     profilePhoto: user.profilePhoto ? decryptSensitiveData(user.profilePhoto) : null,
     twoFactorEnabled: user.twoFactorEnabled,
@@ -42,13 +52,17 @@ export async function getAccountProfile(userId: string) {
   return profileData(user);
 }
 
-export async function updateAccountProfile(userId: string, { jobTitle, profilePhoto }: { jobTitle?: string; profilePhoto?: string }) {
+export async function updateAccountProfile(userId: string, { cep, address, addressNumber }: z.infer<typeof profileUpdateSchema>) {
+  const location = cep === undefined ? undefined : await resolveMunicipality(cep);
   try {
     const user = await prisma.user.update({
       where: { id: userId, active: true, deletedAt: null },
       data: {
-        jobTitle: jobTitle === undefined ? undefined : jobTitle ? encryptSensitiveData(jobTitle) : null,
-        profilePhoto: profilePhoto === undefined ? undefined : encryptSensitiveData(profilePhoto),
+        address: address === undefined ? undefined : encryptSensitiveData(address),
+        addressNumber: addressNumber === undefined ? undefined : addressNumber ? encryptSensitiveData(addressNumber) : null,
+        cep: cep === undefined ? undefined : encryptSensitiveData(cep),
+        city: location && encryptSensitiveData(location.city),
+        state: location && encryptSensitiveData(location.state),
       },
       select: profileFields,
     });

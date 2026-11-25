@@ -1,5 +1,4 @@
-import nodemailer from "nodemailer";
-import { brevoConfig } from "@/config/env";
+import { resendConfig } from "@/config/env";
 import { EmailConfigurationError } from "./EmailConfigurationError";
 import { EmailDeliveryError } from "./EmailDeliveryError";
 
@@ -16,43 +15,45 @@ function getEmailErrorMessage(err: unknown) {
 
 interface SendEmailParams {
   to: string;
-  name: string;
   subject: string;
   htmlContent: string;
   textContent?: string;
 }
 
-export async function sendEmail({ to, name, subject, htmlContent, textContent }: SendEmailParams) {
-  if (!brevoConfig.smtpUser || !brevoConfig.smtpPass || !brevoConfig.senderEmail) {
-    throw new EmailConfigurationError("Configuração do Brevo não encontrada");
+export async function sendEmail({ to, subject, htmlContent, textContent }: SendEmailParams) {
+  const { apiKey, senderEmail, senderName } = resendConfig;
+  if (!apiKey || !senderEmail) {
+    throw new EmailConfigurationError("Configuração do Resend não encontrada");
   }
 
-  const transporter = nodemailer.createTransport({
-    host: brevoConfig.smtpHost,
-    port: brevoConfig.smtpPort,
-    secure: brevoConfig.smtpPort === 465,
-    auth: {
-      user: brevoConfig.smtpUser,
-      pass: brevoConfig.smtpPass,
-    },
-  });
-
   try {
-    const info = await transporter.sendMail({
-      from: `"${brevoConfig.senderName}" <${brevoConfig.senderEmail}>`,
-      to: `"${name}" <${to}>`,
-      subject,
-      text: textContent,
-      html: htmlContent,
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: `${senderName} <${senderEmail}>`,
+        to: [to],
+        subject,
+        text: textContent,
+        html: htmlContent,
+      }),
+      signal: AbortSignal.timeout(10_000),
     });
 
-    console.log(
-      `E-mail aceito pela Brevo: to=${to} from=${brevoConfig.senderEmail} response=${info.response}`
-    );
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const { id } = await response.json() as { id: string };
+    console.log("E-mail aceito pelo Resend:", id);
   } catch (err) {
     const message = getEmailErrorMessage(err);
 
-    console.error("Falha ao enviar e-mail pelo Brevo:", message);
-    throw new EmailDeliveryError(`Falha ao enviar e-mail pelo Brevo: ${message}`);
+    console.error("Falha ao enviar e-mail pelo Resend:", message);
+    throw new EmailDeliveryError(`Falha ao enviar e-mail pelo Resend: ${message}`);
   }
 }

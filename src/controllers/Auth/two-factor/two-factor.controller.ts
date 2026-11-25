@@ -12,6 +12,7 @@ import { sessionMetadata } from "@/services/Auth/session/session-metadata";
 import { recordAuthenticationEvent } from "@/services/Auth/authentication-audit.service";
 
 export async function verifyTwoFactorController(req: Request, res: Response) {
+  res.setHeader("Cache-Control", "no-store");
   const parsed = verifyTwoFactorSchema.safeParse(req.body);
   if (!parsed.success) {
     await recordAuthenticationEvent(req, "TWO_FACTOR_FAILURE");

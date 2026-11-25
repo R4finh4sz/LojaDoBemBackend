@@ -1,7 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decryptSensitiveData } from "@/services/Auth/data-protection/data-protection.service";
-import { decryptedLocation, municipalProducts, sameLocation } from "@/services/Main/residents/municipality";
 import { StoreError } from "./exceptions/StoreError";
 import { InsufficientBalanceError } from "./exceptions/InsufficientBalanceError";
 import { InsufficientStockError } from "./exceptions/InsufficientStockError";
@@ -26,21 +25,21 @@ async function requireCart(sellerId: string, id: string, tx: Prisma.TransactionC
   return cart;
 }
 
-async function requireBuyer(tx: Prisma.TransactionClient, id: string, location: { city: string; state: string }) {
+async function requireBuyer(tx: Prisma.TransactionClient, id: string, municipalityId: string) {
   const buyer = await tx.user.findUnique({
     where: { id, role: "USER", deletedAt: null, OR: [{ active: true }, { pendingActivation: true }] },
-    select: { id: true, city: true, state: true, ecoCoinBalance: true },
+    select: { id: true, municipalityId: true, municipalWallet: true },
   });
-  if (!buyer || !sameLocation(decryptedLocation(buyer), location)) {
+  if (!buyer || buyer.municipalityId !== municipalityId || buyer.municipalWallet?.municipalityId !== municipalityId) {
     throw new StoreError("Munícipe não encontrado neste município", 404);
   }
-  return buyer;
+  return { id: buyer.id, wallet: buyer.municipalWallet };
 }
 
 export function createCart(sellerId: string, buyerId: string) {
   return auditedOperation(async (tx) => {
     const location = await sellerMunicipality(sellerId, tx);
-    await requireBuyer(tx, buyerId, location);
+    await requireBuyer(tx, buyerId, location.id);
     return tx.salesCart.create({
       data: { sellerId, buyerId, expiresAt: new Date(Date.now() + cartLifetime) },
       select: cartSelect,
@@ -70,7 +69,7 @@ export function setCartItem(sellerId: string, id: string, identifier: { productI
     const cart = await requireCart(sellerId, id, tx);
     const location = await sellerMunicipality(sellerId, tx);
     const product = await tx.product.findFirst({
-      where: { ...municipalProducts(location), id: identifier.productId, barcode: identifier.barcode },
+      where: { municipalityId: location.id, id: identifier.productId, barcode: identifier.barcode },
       select: { id: true, active: true, quantity: true },
     });
     if (!product || (quantity > 0 && !product.active)) throw new StoreError("Produto não encontrado neste município", 404);
@@ -121,18 +120,18 @@ export function checkoutCart(sellerId: string, id: string, expectedTotal: string
     if (existing.length) return saleReceipt(tx, sellerId, id, existing);
     const cart = await requireCart(sellerId, id, tx);
     if (!cart.items.length) throw new StoreError("Adicione pelo menos um item ao carrinho", 409);
-    const buyer = await requireBuyer(tx, cart.buyerId, location);
+    const buyer = await requireBuyer(tx, cart.buyerId, location.id);
     const total = cart.items.reduce((sum, item) => sum.add(item.product.price.mul(item.quantity)), new Prisma.Decimal(0));
     if (!total.eq(expectedTotal)) {
       throw new StoreError("O total do carrinho mudou. Confira o novo valor antes de confirmar a venda", 412);
     }
-    if (buyer.ecoCoinBalance.lt(total)) throw new InsufficientBalanceError();
+    if (buyer.wallet.balance.lt(total)) throw new InsufficientBalanceError();
     const now = new Date();
     const claimed = await tx.salesCart.deleteMany({ where: { id, sellerId, expiresAt: { gt: now } } });
     if (!claimed.count) throw new StoreError("Carrinho não encontrado ou expirado", 404);
-    const debit = await tx.user.updateMany({
-      where: { id: buyer.id, deletedAt: null, ecoCoinBalance: { gte: total } },
-      data: { ecoCoinBalance: { decrement: total } },
+    const debit = await tx.municipalWallet.updateMany({
+      where: { id: buyer.wallet.id, balance: { gte: total } },
+      data: { balance: { decrement: total } },
     });
     if (!debit.count) throw new InsufficientBalanceError();
     const day = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo" }).format(now).replaceAll("/", "");
@@ -140,10 +139,10 @@ export function checkoutCart(sellerId: string, id: string, expectedTotal: string
       where: { day }, create: { day, sequence: 1 }, update: { sequence: { increment: 1 } },
     });
     const protocol = day + String(counter.sequence).padStart(2, "0");
-    let balance = buyer.ecoCoinBalance;
+    let balance = buyer.wallet.balance;
     const audit = [];
     for (const { productId, product, quantity } of cart.items) {
-      if (!product.active || !sameLocation(product, location)) {
+      if (!product.active || product.municipalityId !== location.id) {
         throw new StoreError("Produto indisponível neste município", 409);
       }
       const stock = await tx.product.updateMany({
@@ -158,12 +157,12 @@ export function checkoutCart(sellerId: string, id: string, expectedTotal: string
       } });
       const amount = itemTotal.negated();
       await tx.ecoCoinTransaction.create({ data: {
-        userId: buyer.id, grantedById: sellerId, redemptionId: sale.id, type: "REDEMPTION", amount,
+        userId: buyer.id, municipalityId: location.id, grantedById: sellerId, redemptionId: sale.id, type: "REDEMPTION", amount,
       } });
       const balanceBefore = balance;
       balance = balance.add(amount);
       audit.push(await tx.storeAudit.create({ data: {
-        actorId: sellerId, userId: buyer.id, operation: "SALE", cartId: id,
+        actorId: sellerId, userId: buyer.id, municipalityId: location.id, operation: "SALE", cartId: id,
         redemptionId: sale.id, productId, quantity, amount, balanceBefore, balanceAfter: balance,
       } }));
     }

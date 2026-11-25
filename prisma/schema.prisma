@@ -61,6 +61,36 @@ enum RedemptionStatus {
   EXPIRED
 }
 
+model Municipality {
+  id                  String               @id @default(uuid())
+  city                String
+  state               String
+  name                String?
+  address             String?
+  cep                 String?
+  cnpj                String?              @unique
+  users               User[]
+  products            Product[]
+  wallets             MunicipalWallet[]
+  ecoCoinTransactions EcoCoinTransaction[]
+  storeAudits         StoreAudit[]
+
+  @@unique([city, state])
+  @@map("municipalities")
+}
+
+model MunicipalWallet {
+  id             String       @id @default(uuid())
+  municipalityId String
+  userId         String?      @unique
+  balance        Decimal      @default(0) @db.Decimal(12, 2)
+  municipality   Municipality @relation(fields: [municipalityId], references: [id], onDelete: Restrict)
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([municipalityId])
+  @@map("municipal_wallets")
+}
+
 model User {
   id                         String                   @id @default(uuid())
   name                       String
@@ -79,6 +109,7 @@ model User {
   emailHash                  String?                  @unique
   password                   String
   twoFactorEnabled           Boolean                  @default(false)
+  firstLogin                 Boolean                  @default(false)
   role                       Role                     @default(USER)
   active                     Boolean                  @default(true)
   pendingActivation          Boolean                  @default(false)
@@ -94,7 +125,10 @@ model User {
   sessions                   Session[]
   twoFactorChallenges        TwoFactorChallenge[]
   passwordResetChallenges    PasswordResetChallenge[]
-  ecoCoinBalance             Decimal                  @default(0) @db.Decimal(12, 2)
+  legacyEcoCoinBalance       Decimal                  @default(0) @map("ecoCoinBalance") @db.Decimal(12, 2)
+  municipalityId             String?
+  municipality               Municipality?            @relation(fields: [municipalityId], references: [id], onDelete: Restrict)
+  municipalWallet            MunicipalWallet?
   products                   Product[]                @relation("AdminProducts")
   redemptions                Redemption[]             @relation("UserRedemptions")
   validatedRedemptions       Redemption[]             @relation("ValidatedRedemptions")
@@ -103,29 +137,32 @@ model User {
   salesCarts                 SalesCart[]              @relation("SellerCarts")
   purchaseCarts              SalesCart[]              @relation("BuyerCarts")
 
+  @@index([municipalityId])
   @@map("users")
 }
 
 model Product {
-  id          String       @id @default(uuid())
-  adminId     String
-  name        String
-  description String
-  photo       String
-  barcode     String?
-  price       Decimal      @db.Decimal(12, 2)
-  quantity    Int
-  city        String
-  state       String
-  active      Boolean      @default(true)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  admin       User         @relation("AdminProducts", fields: [adminId], references: [id])
-  redemptions Redemption[]
-  cartItems   SalesCartItem[]
+  id             String          @id @default(uuid())
+  adminId        String?
+  municipalityId String
+  name           String
+  description    String
+  photo          String
+  barcode        String?
+  price          Decimal         @db.Decimal(12, 2)
+  quantity       Int
+  city           String
+  state          String
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  admin          User?           @relation("AdminProducts", fields: [adminId], references: [id], onDelete: SetNull)
+  municipality   Municipality    @relation(fields: [municipalityId], references: [id], onDelete: Restrict)
+  redemptions    Redemption[]
+  cartItems      SalesCartItem[]
 
-  @@index([city, state, active])
-  @@unique([city, state, barcode])
+  @@unique([municipalityId, barcode])
+  @@index([municipalityId, active])
   @@index([adminId])
   @@map("products")
 }
@@ -170,24 +207,27 @@ model ResidentActivation {
 }
 
 model StoreAudit {
-  id             String   @id @default(uuid())
+  id             String        @id @default(uuid())
   operation      String
+  municipalityId String?
+  municipality   Municipality? @relation(fields: [municipalityId], references: [id], onDelete: Restrict)
   actorId        String?
   userId         String
-  amount         Decimal  @db.Decimal(12, 2)
-  balanceBefore  Decimal  @db.Decimal(12, 2)
-  balanceAfter   Decimal  @db.Decimal(12, 2)
+  amount         Decimal       @db.Decimal(12, 2)
+  balanceBefore  Decimal       @db.Decimal(12, 2)
+  balanceAfter   Decimal       @db.Decimal(12, 2)
   redemptionId   String?
   productId      String?
   quantity       Int?
   requestKey     String?
   requestHash    String?
   cartId         String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime      @default(now())
 
   @@unique([actorId, operation, requestKey])
   @@index([userId, createdAt])
   @@index([actorId, cartId])
+  @@index([municipalityId, createdAt])
   @@map("store_audit")
 }
 
@@ -226,17 +266,20 @@ model Redemption {
 }
 
 model EcoCoinTransaction {
-  id           String                 @id @default(uuid())
-  userId       String
-  grantedById  String?
-  redemptionId String?
-  type         EcoCoinTransactionType
-  amount       Decimal                @db.Decimal(12, 2)
-  description  String?
-  createdAt    DateTime               @default(now())
-  user         User                   @relation("UserEcoCoinTransactions", fields: [userId], references: [id])
-  grantedBy    User?                  @relation("GrantedEcoCoinTransactions", fields: [grantedById], references: [id])
+  id             String                 @id @default(uuid())
+  userId         String?
+  municipalityId String?
+  grantedById    String?
+  redemptionId   String?
+  type           EcoCoinTransactionType
+  amount         Decimal                @db.Decimal(12, 2)
+  description    String?
+  createdAt      DateTime               @default(now())
+  user           User?                  @relation("UserEcoCoinTransactions", fields: [userId], references: [id], onDelete: SetNull)
+  municipality   Municipality?          @relation(fields: [municipalityId], references: [id], onDelete: Restrict)
+  grantedBy      User?                  @relation("GrantedEcoCoinTransactions", fields: [grantedById], references: [id])
 
+  @@index([municipalityId])
   @@index([userId, createdAt])
   @@index([redemptionId])
   @@map("eco_coin_transactions")

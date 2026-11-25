@@ -19,7 +19,7 @@ export class CreateProductDto {
   @Transform(({ value }) => typeof value === "string" ? value.trim() : value)
   @IsString()
   @MinLength(1)
-  @MaxLength(2048)
+  @MaxLength(90000)
   photo!: string;
 
   @Transform(({ value }) => typeof value === "string" ? value.trim() : value)
