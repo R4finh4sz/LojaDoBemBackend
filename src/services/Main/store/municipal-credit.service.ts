@@ -9,10 +9,12 @@ export function creditResident(actorId: string, cpf: string, value: string, requ
   const requestHash = createSearchHash(JSON.stringify([cpf, amount.toFixed(2)]));
   return auditedOperation(async (tx) => {
     const issuer = await tx.user.findUnique({
-      where: { id: actorId, role: Role.COOPERATIVA, active: true, deletedAt: null },
-      select: { municipalityId: true },
+      where: { id: actorId, role: { in: [Role.COOPERATIVA, Role.PrefeituraVendedor, Role.MASTER] }, active: true, deletedAt: null },
+      select: { role: true, municipalityId: true },
     });
-    if (!issuer?.municipalityId) throw new StoreError("Emissão disponível para cooperativas vinculadas a uma prefeitura", 403);
+    if (!issuer || (issuer.role !== Role.MASTER && !issuer.municipalityId)) {
+      throw new StoreError("Emissão disponível para o MASTER e operadores vinculados a uma prefeitura", 403);
+    }
     const prior = await previousAudit(tx, actorId, "CREDIT", requestKey, requestHash);
     if (prior) {
       const resident = await tx.user.findUnique({ where: { id: prior.userId, deletedAt: null }, select: { name: true } });
