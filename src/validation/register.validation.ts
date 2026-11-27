@@ -85,7 +85,8 @@ export const registerFields = z.object({
     .string()
     .trim()
     .optional()
-    .transform((value) => (value ? value.toLowerCase() : undefined)),
+    .transform((value) => value || undefined)
+    .refine((value) => !value || /^(?:https?:\/\/|\/(?!\/)|data:)/i.test(value), "Foto de perfil inválida"),
   termsAccepted: z.literal(true, {
     errorMap: () => ({ message: "Aceite dos termos obrigatório" }),
   }),
