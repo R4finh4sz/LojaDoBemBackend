@@ -11,7 +11,8 @@ export class UserAlreadyExistsError extends Error {}
 
 type Registration =
   | { role: typeof Role.USER; password: string }
-  | { role: typeof Role.PrefeituraVendedor | typeof Role.COOPERATIVA; cnpj?: string };
+  | { role: typeof Role.PrefeituraVendedor | typeof Role.COOPERATIVA; password: string; cnpj?: string;
+      db: Prisma.TransactionClient; id: string; termId: string };
 
 function normalizeText(value: string) {
   return value.trim().toLowerCase();
@@ -39,38 +40,36 @@ export async function createUserWithRole(
     state,
     profilePhoto,
     email,
-    password,
-  }: Omit<RegisterInput, "passwordConfirmation" | "termsAccepted"> & { termsAccepted: boolean },
-  role: Role,
-  cnpj?: string,
-  options?: { db: Prisma.TransactionClient; id: string; termId: string },
+  }: Omit<RegisterInput, "password" | "passwordConfirmation" | "termsAccepted">,
+  registration: Registration,
 ): Promise<RegisterResult> {
   const { role } = registration;
-  const firstLogin = role !== Role.USER;
+  const invitation = registration.role === Role.USER ? undefined : registration;
   const normalizedEmail = normalizeText(email);
   const normalizedCpf = cpf.replace(/\D/g, "");
   const emailHash = createSearchHash(normalizedEmail);
   const cpfHash = createSearchHash(normalizedCpf);
 
-  const db = options?.db ?? prisma;
+  const db = invitation?.db ?? prisma;
   await ensureAvailableIdentity(normalizedCpf, normalizedEmail, cpfHash, emailHash, db);
 
-  const location = normalizeMunicipality(await resolveMunicipality(cep));
+  const location = normalizeMunicipality(invitation && city && state ? { city, state } : await resolveMunicipality(cep));
   if (!sameLocation({ city: city ?? location.city, state: state ?? location.state }, location)) {
     throw new StoreError("Cidade e UF devem corresponder ao CEP", 400);
   }
-  const municipality = await prisma.municipality.findUnique({ where: { city_state: location }, select: { id: true } });
+  const municipality = await db.municipality.findUnique({ where: { city_state: location }, select: { id: true } });
   if (!municipality) throw new StoreError("Não há prefeitura cadastrada para o município deste CEP", 404);
 
-  const hashedPassword = await hashPassword(registration.role === Role.USER ? registration.password : normalizedCpf);
+  const hashedPassword = await hashPassword(registration.password);
 
   try {
     const user = await db.user.create({
       data: {
-        ...(options && {
-          id: options.id,
-          termAccepts: { create: { termId: options.termId, accepted: true } },
+        ...(invitation && {
+          id: invitation.id,
+          termAccepts: { create: { termId: invitation.termId, accepted: true } },
         }),
+        ...(role === Role.USER && { municipalWallet: { create: { municipality: { connect: { id: municipality.id } } } } }),
         name: encryptSensitiveData(normalizeText(name)),
         cpf: encryptSensitiveData(normalizedCpf),
         cpfHash,
@@ -78,15 +77,16 @@ export async function createUserWithRole(
         phone: encryptSensitiveData(phone.replace(/\D/g, "")),
         cep: encryptSensitiveData(cep.replace(/\D/g, "")),
         address: encryptSensitiveData(normalizeText(address)),
-        city: encryptSensitiveData(normalizeText(city)),
-        state: encryptSensitiveData(normalizeText(state)),
+        city: encryptSensitiveData(location.city),
+        state: encryptSensitiveData(location.state),
         profilePhoto: profilePhoto ? encryptSensitiveData(normalizeText(profilePhoto)) : null,
-        termsAccepted,
+        termsAccepted: true,
         email: encryptSensitiveData(normalizedEmail),
         emailHash,
         password: hashedPassword,
         role,
-        cnpj: cnpj ? encryptSensitiveData(cnpj) : undefined,
+        municipality: { connect: { id: municipality.id } },
+        cnpj: invitation?.cnpj ? encryptSensitiveData(invitation.cnpj) : undefined,
       },
       select: {
         id: true,

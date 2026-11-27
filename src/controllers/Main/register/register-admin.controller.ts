@@ -23,7 +23,9 @@ export const registerOperatorController = (role: typeof Role.PrefeituraVendedor 
   try {
     const cnpj = role === Role.PrefeituraVendedor ? cnpjSchema.parse(req.body.cnpj) : undefined;
     const location = await resolveMunicipality(parsed.data.cep);
-    if (!sameLocation(parsed.data, location)) throw new StoreError("Cidade e UF devem corresponder ao CEP do operador", 400);
+    if (!sameLocation({ city: parsed.data.city ?? location.city, state: parsed.data.state ?? location.state }, location)) {
+      throw new StoreError("Cidade e UF devem corresponder ao CEP do operador", 400);
+    }
     const result = await sendOperatorInvitation({ ...parsed.data, ...location }, role, cnpj);
     return res.status(202).json(result);
   } catch (err) {
