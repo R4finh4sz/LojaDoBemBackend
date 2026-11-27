@@ -32,12 +32,8 @@ export interface TermAcceptResult {
 }
 
 function normalizeNullableText(value?: string) {
-  const normalized = value?.trim().toLowerCase();
+  const normalized = value?.trim();
   return normalized || null;
-}
-
-function normalizeText(value: string) {
-  return value.trim().toLowerCase();
 }
 
 function termTypeForRole(role: Role): TermTypeValue {
@@ -54,6 +50,13 @@ async function getNextVersion(type: TermTypeValue, tx: Prisma.TransactionClient)
   return (latest?.version ?? 0) + 1;
 }
 
+async function lockTermType(type: TermTypeValue, tx: Prisma.TransactionClient) {
+  const audience = type === "USER" ? 1 : 2;
+  await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(58347, ${audience}::integer)`;
+}
+
+export class TermVersionChangedError extends Error {}
+
 async function createNewVersion(
   data: {
     title?: string;
@@ -62,17 +65,8 @@ async function createNewVersion(
   },
   tx: Prisma.TransactionClient
 ): Promise<TermEntity> {
+  await lockTermType(data.type, tx);
   const version = await getNextVersion(data.type, tx);
-
-  await tx.termAccept.updateMany({
-    where: {
-      term: {
-        type: data.type,
-      },
-      accepted: true,
-    },
-    data: { accepted: false },
-  });
 
   await tx.term.updateMany({
     where: {
@@ -85,7 +79,7 @@ async function createNewVersion(
   return tx.term.create({
     data: {
       title: normalizeNullableText(data.title),
-      text: normalizeText(data.text),
+      text: data.text.trim(),
       type: data.type,
       version,
       active: true,
@@ -186,29 +180,46 @@ export async function getTermStatus(userId: string, role: Role) {
   };
 }
 
+export function listAcceptedTerms(userId: string) {
+  return prisma.termAccept.findMany({
+    where: { userId, accepted: true },
+    orderBy: [{ acceptedAt: "desc" }, { id: "desc" }],
+    select: {
+      acceptedAt: true,
+      term: { select: { documentId: true, title: true, text: true, version: true, type: true, active: true } },
+    },
+  });
+}
+
 export async function acceptCurrentTerm(
   userId: string,
-  role: Role
+  role: Role,
+  documentId?: string,
 ): Promise<TermAcceptResult> {
-  const currentTerm = await getCurrentTermByRole(role);
-
   try {
-    const accept = await prisma.termAccept.create({
-      data: {
-        userId,
-        termId: currentTerm.id,
-        accepted: true,
-      },
-      select: {
-        accepted: true,
-        acceptedAt: true,
-        term: {
-          select: {
-            documentId: true,
-            version: true,
+    const accept = await prisma.$transaction(async (tx) => {
+      await lockTermType(termTypeForRole(role), tx);
+      const currentTerm = await getCurrentTermByRole(role, tx);
+      if (documentId && currentTerm.documentId !== documentId) {
+        throw new TermVersionChangedError("Os termos foram atualizados. Consulte a versão vigente antes de aceitar.");
+      }
+      return tx.termAccept.create({
+        data: {
+          userId,
+          termId: currentTerm.id,
+          accepted: true,
+        },
+        select: {
+          accepted: true,
+          acceptedAt: true,
+          term: {
+            select: {
+              documentId: true,
+              version: true,
+            },
           },
         },
-      },
+      });
     });
 
     return {

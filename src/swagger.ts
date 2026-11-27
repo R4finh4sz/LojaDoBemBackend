@@ -1762,11 +1762,23 @@ export const swaggerSpec = swaggerJSDoc({
           },
         },
       },
+      "/terms/history": {
+        get: {
+          tags: ["Termos"],
+          summary: "Lista os termos aceitos pelo usuário autenticado",
+          security: bearer,
+          responses: {
+            200: { description: "Histórico com data do aceite e conteúdo de cada versão" },
+            401: { description: "Sessão inválida ou expirada" },
+          },
+        },
+      },
       "/terms/accept": {
         post: {
           tags: ["Termos"],
           summary: "Aceita a versao vigente do termo",
           security: [{ bearerAuth: [] }],
+          requestBody: { ...jsonBody({ documentId: uuid }, []), required: false },
           responses: {
             201: {
               description: "Termo aceito",

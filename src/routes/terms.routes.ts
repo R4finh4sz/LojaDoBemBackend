@@ -5,6 +5,7 @@ import {
   createTermController,
   getCurrentTermController,
   getTermByDocumentIdController,
+  getTermHistoryController,
   getTermStatusController,
   listTermsController,
   updateTermController,
@@ -20,6 +21,7 @@ router.use(authMiddleware);
 
 router.get("/current", getCurrentTermController);
 router.get("/status", getTermStatusController);
+router.get("/history", getTermHistoryController);
 router.post("/accept", acceptCurrentTermController);
 
 router.post("/create", requireRole(Role.MASTER), validateDto(CreateTermDto), createTermController);
