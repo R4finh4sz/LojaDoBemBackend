@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { z } from "zod";
 import {
   acceptCurrentTerm,
   createTerm,
@@ -6,9 +7,11 @@ import {
   getCurrentTermByRole,
   getTermByDocumentId,
   getTermStatus,
+  listAcceptedTerms,
   listTerms,
   TermAlreadyAcceptedError,
   TermNotFoundError,
+  TermVersionChangedError,
   updateTerm,
 } from "@/services/Main/terms/terms.service";
 
@@ -88,16 +91,30 @@ export async function getTermStatusController(req: Request, res: Response) {
   }
 }
 
-export async function acceptCurrentTermController(req: Request, res: Response) {
+export async function getTermHistoryController(req: Request, res: Response) {
+  res.setHeader("Cache-Control", "no-store");
   try {
-    const accept = await acceptCurrentTerm(req.user!.id, req.user!.role);
+    return res.json({ history: await listAcceptedTerms(req.user!.id) });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Erro interno ao buscar histórico de termos" });
+  }
+}
+
+const acceptanceInput = z.object({ documentId: z.string().uuid().optional() });
+
+export async function acceptCurrentTermController(req: Request, res: Response) {
+  const input = acceptanceInput.safeParse(req.body ?? {});
+  if (!input.success) return res.status(400).json({ message: "Documento inválido" });
+  try {
+    const accept = await acceptCurrentTerm(req.user!.id, req.user!.role, input.data.documentId);
     return res.status(201).json({ accept });
   } catch (err) {
     if (err instanceof CurrentTermNotFoundError) {
       return res.status(404).json({ message: err.message });
     }
 
-    if (err instanceof TermAlreadyAcceptedError) {
+    if (err instanceof TermAlreadyAcceptedError || err instanceof TermVersionChangedError) {
       return res.status(409).json({ message: err.message });
     }
 
