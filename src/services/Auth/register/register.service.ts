@@ -4,6 +4,7 @@ import { RegisterInput } from "@/types/register.types";
 import { RegisterResult } from "@/types/auth.types";
 import { normalizeMunicipality, resolveMunicipality, sameLocation } from "@/services/Main/residents/municipality";
 import { StoreError } from "@/services/Main/store/exceptions/StoreError";
+import { sanitizeProfilePhoto } from "@/services/Main/account/profile-photo.service";
 import { hashPassword } from "../password/password.service";
 import { createSearchHash, encryptSensitiveData } from "../data-protection/data-protection.service";
 
@@ -44,6 +45,7 @@ export async function createUserWithRole(
   registration: Registration,
 ): Promise<RegisterResult> {
   const { role } = registration;
+  const photo = profilePhoto && /^data:/i.test(profilePhoto) ? await sanitizeProfilePhoto(profilePhoto) : profilePhoto;
   const invitation = registration.role === Role.USER ? undefined : registration;
   const normalizedEmail = normalizeText(email);
   const normalizedCpf = cpf.replace(/\D/g, "");
@@ -79,7 +81,7 @@ export async function createUserWithRole(
         address: encryptSensitiveData(normalizeText(address)),
         city: encryptSensitiveData(location.city),
         state: encryptSensitiveData(location.state),
-        profilePhoto: profilePhoto ? encryptSensitiveData(normalizeText(profilePhoto)) : null,
+        profilePhoto: photo ? encryptSensitiveData(photo) : null,
         termsAccepted: true,
         email: encryptSensitiveData(normalizedEmail),
         emailHash,

@@ -5,6 +5,7 @@ import { resolveMunicipality } from "@/services/Main/residents/municipality";
 import type { profileUpdateSchema } from "@/validation/profile-update.validation";
 import type { z } from "zod";
 import { AccountError } from "./account.service";
+import { sanitizeProfilePhoto } from "./profile-photo.service";
 import { verifyPassword } from "@/services/Auth/password/password.service";
 
 const profileFields = { name: true, email: true, cep: true, city: true, state: true, municipalityId: true, address: true, addressNumber: true, jobTitle: true, profilePhoto: true, twoFactorEnabled: true } satisfies Prisma.UserSelect;
@@ -52,7 +53,8 @@ export async function getAccountProfile(userId: string) {
   return profileData(user);
 }
 
-export async function updateAccountProfile(userId: string, { cep, address, addressNumber }: z.infer<typeof profileUpdateSchema>) {
+export async function updateAccountProfile(userId: string, { cep, address, addressNumber, profilePhoto }: z.infer<typeof profileUpdateSchema>) {
+  const photo = profilePhoto === undefined ? undefined : await sanitizeProfilePhoto(profilePhoto);
   const location = cep === undefined ? undefined : await resolveMunicipality(cep);
   try {
     const user = await prisma.user.update({
@@ -60,6 +62,7 @@ export async function updateAccountProfile(userId: string, { cep, address, addre
       data: {
         address: address === undefined ? undefined : encryptSensitiveData(address),
         addressNumber: addressNumber === undefined ? undefined : addressNumber ? encryptSensitiveData(addressNumber) : null,
+        profilePhoto: photo === undefined ? undefined : encryptSensitiveData(photo),
         cep: cep === undefined ? undefined : encryptSensitiveData(cep),
         city: location && encryptSensitiveData(location.city),
         state: location && encryptSensitiveData(location.state),
