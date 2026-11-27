@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { randomUUID } from "node:crypto";
 import { authConfig } from "@/config/env";
 import type { SessionMetadata } from "./session-metadata";
 import type { Role } from "@prisma/client";
@@ -14,20 +15,27 @@ export function getSessionExpiresAt() {
 }
 
 export async function issueSessionToken(user: { id: string; role: Role }, metadata?: SessionMetadata): Promise<AuthResult> {
-  const session = await prisma.session.create({
-    data: {
-      userId: user.id,
-      ...metadata,
-      expiresAt: getSessionExpiresAt(),
-    },
-  });
   const payload: AuthTokenPayload = {
     sub: user.id,
-    sid: session.id,
+    sid: randomUUID(),
     role: user.role,
     level: roleLevel(user.role),
   };
-  return { token: jwt.sign(payload, authConfig.jwtSecret, { expiresIn: authConfig.jwtExpiresIn } as jwt.SignOptions) };
+  const configuredToken = jwt.sign(payload, authConfig.jwtSecret, { expiresIn: authConfig.jwtExpiresIn } as jwt.SignOptions);
+  const tokenExpiry = (jwt.decode(configuredToken) as jwt.JwtPayload).exp!;
+  const effectiveExpiry = Math.min(tokenExpiry, Math.floor(getSessionExpiresAt().getTime() / 1000));
+  const token = effectiveExpiry === tokenExpiry
+    ? configuredToken
+    : jwt.sign({ ...payload, exp: effectiveExpiry }, authConfig.jwtSecret);
+  await prisma.session.create({
+    data: {
+      id: payload.sid,
+      userId: user.id,
+      ...metadata,
+      expiresAt: new Date(effectiveExpiry * 1000),
+    },
+  });
+  return { token };
 }
 
 export async function listSessionHistory(userId: string, sessionId: string, page: number, limit: number) {

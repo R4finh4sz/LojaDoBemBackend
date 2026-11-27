@@ -20,12 +20,12 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     const payload = jwt.verify(token, authConfig.jwtSecret) as AuthTokenPayload;
 
     if (!payload.sid) {
-      return res.status(401).json({ message: "Sessão inválida" });
+      return res.status(401).json({ code: "SESSION_INVALID", message: "Sessão inválida" });
     }
 
     const role = await getActiveSessionRole(payload.sid, payload.sub);
     if (!role) {
-      return res.status(401).json({ message: "Sessão expirada ou encerrada" });
+      return res.status(401).json({ code: "SESSION_INVALID", message: "Sessão expirada ou encerrada" });
     }
 
     req.user = {
@@ -36,7 +36,10 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     };
     return next();
   } catch (err) {
-    return res.status(401).json({ message: "Token inválido ou expirado" });
+    if (err instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({ code: "TOKEN_EXPIRED", message: "Token expirado" });
+    }
+    return res.status(401).json({ code: "SESSION_INVALID", message: "Token inválido" });
   }
 }
 
